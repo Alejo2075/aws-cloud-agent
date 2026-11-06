@@ -1,0 +1,6 @@
+# Default owner for everything; security-sensitive paths are called out explicitly.
+* @Alejo2075
+/packages/changes/ @Alejo2075
+/packages/deployments/ @Alejo2075
+/packages/connections/ @Alejo2075
+/.github/ @Alejo2075

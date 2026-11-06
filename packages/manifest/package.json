@@ -1,0 +1,17 @@
+{
+  "name": "@cloud-agent/manifest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cloud-agent/contracts": "workspace:^",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloud-agent/discovery": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^"
+  }
+}

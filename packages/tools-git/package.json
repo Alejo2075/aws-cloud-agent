@@ -1,0 +1,14 @@
+{
+  "name": "@cloud-agent/tools-git",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "zod": "^4.6.7"
+  }
+}

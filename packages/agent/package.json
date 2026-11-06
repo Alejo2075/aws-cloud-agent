@@ -1,0 +1,21 @@
+{
+  "name": "@cloud-agent/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1163.0",
+    "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^",
+    "@cloud-agent/tools-aws": "workspace:^",
+    "@cloud-agent/tools-git": "workspace:^",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloud-agent/discovery": "workspace:^"
+  }
+}

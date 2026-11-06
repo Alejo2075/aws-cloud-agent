@@ -1,0 +1,16 @@
+{
+  "name": "@cloud-agent/changes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cloud-agent/connections": "workspace:^",
+    "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^",
+    "zod": "^4.6.7"
+  }
+}

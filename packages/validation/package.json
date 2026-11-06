@@ -1,0 +1,17 @@
+{
+  "name": "@cloud-agent/validation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-codebuild": "^3.1163.0",
+    "@cloud-agent/contracts": "workspace:^",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloud-agent/changes": "workspace:^"
+  }
+}

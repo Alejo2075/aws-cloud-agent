@@ -1,0 +1,44 @@
+{
+  "name": "aws-cloud-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "gen:schema": "node --import tsx scripts/gen-manifest-schema.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm lint && pnpm format && pnpm test",
+    "audit": "pnpm audit --audit-level moderate"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "aws-sdk-client-mock": "^4.1.0",
+    "commander": "^15.0.0",
+    "eslint": "^10.14.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  },
+  "license": "Apache-2.0",
+  "description": "Evidence-backed understanding and approval-gated changes for existing AWS applications",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alejo2075/aws-cloud-agent.git"
+  },
+  "pnpm": {
+    "overrides": {
+      "minimatch": ">=11.0.1"
+    }
+  }
+}
