@@ -23,7 +23,10 @@ export interface Verifier {
 
 /** Fresh read-only look at the world immediately before a write. */
 export interface Preflight {
-  check(
-    plan: ChangePlan,
-  ): Promise<{ sourceRevision: string; driftDetected: boolean; healthy: boolean }>;
+  check(plan: ChangePlan): Promise<{
+    sourceRevision: string;
+    driftDetected: boolean;
+    healthy: boolean;
+    healthDetail?: string;
+  }>;
 }

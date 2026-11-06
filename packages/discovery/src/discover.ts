@@ -5,7 +5,16 @@ import type { EvidenceStore } from "@cloud-agent/evidence";
 import type { GraphStore } from "@cloud-agent/graph";
 import { AccessDeniedError, arnFor, physicalIdFromArn, typeFromArn } from "@cloud-agent/tools-aws";
 import type { AwsReadPort, ResourceDetail } from "@cloud-agent/tools-aws";
+import { createHash } from "node:crypto";
 import { createLimiter } from "./limit.js";
+
+/** Stable digest of a configuration summary; volatile counters (approximate*) are excluded. */
+export function configDigest(summary: Record<string, unknown>): string {
+  const stable = Object.entries(summary)
+    .filter(([k, v]) => !k.startsWith("approximate") && v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : 1));
+  return createHash("sha256").update(JSON.stringify(stable)).digest("hex").slice(0, 16);
+}
 
 export interface DiscoveryOptions {
   now?: Date;
@@ -161,6 +170,9 @@ export async function discoverSystem(
   );
 
   const resources: GraphResource[] = inScope.map((c) => ({
+    ...(Object.keys(details.get(c.id)?.detail?.summary ?? {}).length && {
+      configDigest: configDigest(details.get(c.id)!.detail!.summary),
+    }),
     id: c.id,
     ...(c.arn && { arn: c.arn }),
     type: c.type,

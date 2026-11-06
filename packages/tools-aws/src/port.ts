@@ -46,6 +46,8 @@ export interface AwsReadPort {
   listStackResources(stack: string): Promise<StackResource[]>;
   listResourcesByTag(key: string, value: string): Promise<TaggedResource[]>;
   describeResource(target: DescribeTarget): Promise<ResourceDetail>;
+  /** CloudFormation status of a stack, used as a pre-write health gate. */
+  getStackStatus(stack: string): Promise<string>;
 }
 
 export class AccessDeniedError extends Error {
@@ -63,4 +65,9 @@ export class NotFoundError extends Error {
     super(`not found: ${what}`);
     this.name = "NotFoundError";
   }
+}
+
+/** A stack may be changed only when it is settled and not in a failed or rollback state. */
+export function isStackHealthy(status: string): boolean {
+  return ["CREATE_COMPLETE", "UPDATE_COMPLETE", "IMPORT_COMPLETE"].includes(status);
 }

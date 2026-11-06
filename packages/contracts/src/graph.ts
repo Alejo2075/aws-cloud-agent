@@ -21,6 +21,8 @@ export const GraphResource = z.object({
   logicalId: z.string().optional(),
   stack: z.string().optional(),
   tags: z.record(z.string(), z.string()).default({}),
+  /** Digest of the stable configuration summary; a change between discoveries signals configuration drift. */
+  configDigest: z.string().optional(),
   provenance: Provenance,
   observedAt: z.iso.datetime(),
 });

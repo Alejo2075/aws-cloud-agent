@@ -16,7 +16,11 @@ export class FakeAwsReadPort implements AwsReadPort {
       string,
       Array<{ arn: string; tags: Record<string, string> }>
     > = {},
+    readonly stackStatuses: Record<string, string> = {},
   ) {}
+  async getStackStatus(stack: string) {
+    return this.stackStatuses[stack] ?? "UPDATE_COMPLETE";
+  }
   async listStackResources(stack: string) {
     const s = this.stacks[stack];
     if (!s) throw new Error(`no such stack ${stack}`);
