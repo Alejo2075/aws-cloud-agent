@@ -4,6 +4,7 @@ import type { EvidenceStore } from "@cloud-agent/evidence";
 import { findResource, impactOf, neighbors, summarize } from "@cloud-agent/graph";
 import { freshness } from "@cloud-agent/evidence";
 import type { ObservabilityPort } from "@cloud-agent/tools-aws";
+import type { RepoReader } from "@cloud-agent/tools-git";
 
 export interface ToolPolicy {
   sensitiveDataAccess: boolean;
@@ -18,6 +19,7 @@ export interface ToolContext {
   now: Date;
   policy: ToolPolicy;
   observability?: ObservabilityPort;
+  repo?: RepoReader;
 }
 
 export interface ToolResult {

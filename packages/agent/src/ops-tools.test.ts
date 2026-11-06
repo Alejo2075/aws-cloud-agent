@@ -171,3 +171,32 @@ describe("ops tools", () => {
     expect((r.data as { records: unknown[] }).records).toHaveLength(1);
   });
 });
+
+describe("repo tools", () => {
+  it("answers honestly when no repository is linked", async () => {
+    const { inspectRepository } = await import("./repo-tools.js");
+    const r = await inspectRepository.run(await ctx(), {});
+    expect(JSON.stringify(r.data)).toContain("no source repository is linked");
+    expect(r.observations).toEqual([]);
+  });
+  it("refuses secret files and traversal as data, not crashes", async () => {
+    const { readSourceFile } = await import("./repo-tools.js");
+    const { RepoReader } = await import("@cloud-agent/tools-git");
+    const { mkdtemp, writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "r-"));
+    await writeFile(join(dir, ".env"), "X=1");
+    const c = await ctx({ repo: await RepoReader.open(dir) });
+    expect(
+      JSON.stringify(
+        (await readSourceFile.run(c, { path: ".env", startLine: 1, maxLines: 5 })).data,
+      ),
+    ).toContain("secret-bearing");
+    expect(
+      JSON.stringify(
+        (await readSourceFile.run(c, { path: "../x", startLine: 1, maxLines: 5 })).data,
+      ),
+    ).toContain("escapes");
+  });
+});

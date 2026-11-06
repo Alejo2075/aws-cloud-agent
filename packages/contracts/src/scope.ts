@@ -26,6 +26,14 @@ export const RoleSet = z.object({
 });
 export type RoleSet = z.infer<typeof RoleSet>;
 
+/** Explicitly linked source repository (a local checkout). Linking is opt-in per connection. */
+export const RepositoryLink = z.object({
+  path: z.string().min(1),
+  iacRoot: z.string().optional(),
+  defaultBranch: z.string().optional(),
+});
+export type RepositoryLink = z.infer<typeof RepositoryLink>;
+
 export const ConnectionProfile = z.object({
   connectionId: z.string().min(1),
   systemId: z.string().min(1),
@@ -39,6 +47,7 @@ export const ConnectionProfile = z.object({
   sensitiveDataAccess: z.boolean().default(false),
   /** Allows Cost Explorer queries scoped to the connection's tag selector. */
   costDataAccess: z.boolean().default(false),
+  repository: RepositoryLink.optional(),
   lastDiscoveryAt: z.iso.datetime().optional(),
 });
 export type ConnectionProfile = z.infer<typeof ConnectionProfile>;

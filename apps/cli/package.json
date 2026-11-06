@@ -15,6 +15,7 @@
     "@cloud-agent/graph": "workspace:^",
     "@cloud-agent/manifest": "workspace:^",
     "@cloud-agent/tools-aws": "workspace:^",
+    "@cloud-agent/tools-git": "workspace:^",
     "commander": "^15.0.0",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"

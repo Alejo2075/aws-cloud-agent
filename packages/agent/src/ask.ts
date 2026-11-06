@@ -7,6 +7,8 @@ import { SUBMIT_TOOL, SYSTEM_PROMPT } from "./prompt.js";
 import { graphTools } from "./tools.js";
 import type { AgentTool, ToolPolicy } from "./tools.js";
 import { opsTools } from "./ops-tools.js";
+import { repoTools } from "./repo-tools.js";
+import type { RepoReader } from "@cloud-agent/tools-git";
 import type { ObservabilityPort } from "@cloud-agent/tools-aws";
 
 export interface AskOptions {
@@ -16,6 +18,7 @@ export interface AskOptions {
   model: ModelPort;
   tools?: AgentTool[];
   observability?: ObservabilityPort;
+  repo?: RepoReader;
   policy?: Partial<ToolPolicy>;
   now?: Date;
   maxTurns?: number;
@@ -53,7 +56,11 @@ export async function askSystem(opts: AskOptions): Promise<EvidenceBackedAnswer>
   if (!opts.graph) return noDataAnswer();
   const graph = opts.graph;
   const now = opts.now ?? new Date();
-  const tools = opts.tools ?? (opts.observability ? [...graphTools, ...opsTools] : graphTools);
+  const tools = opts.tools ?? [
+    ...graphTools,
+    ...(opts.observability ? opsTools : []),
+    ...(opts.repo ? repoTools : []),
+  ];
   const policy: ToolPolicy = { sensitiveDataAccess: false, costDataAccess: false, ...opts.policy };
   for (const t of tools)
     if (t.access !== "read")

@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { RepoReader } from "@cloud-agent/tools-git";
 import { Command, CommanderError } from "commander";
 import { askSystem } from "@cloud-agent/agent";
 import { ConnectionProfile } from "@cloud-agent/contracts";
@@ -111,6 +112,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         region: o.region,
         scope: { stacks, resourceArns: o.arn, tags },
         roles: { "read-only": o.roleArn },
+        ...(o.repo && { repository: { path: resolve(o.repo) } }),
       });
       await profiles.save(profile);
       await audit.append(
@@ -186,6 +188,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       const answer = await askSystem({
         question,
         graph,
+        ...(p.repository && { repo: await RepoReader.open(p.repository.path) }),
         ...(session?.observe && { observability: session.observe }),
         policy: {
           sensitiveDataAccess: p.sensitiveDataAccess,

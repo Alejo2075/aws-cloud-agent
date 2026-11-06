@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
     "zod": "^4.6.7"
   }
 }

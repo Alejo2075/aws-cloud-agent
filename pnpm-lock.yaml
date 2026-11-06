@@ -67,6 +67,9 @@ importers:
       '@cloud-agent/tools-aws':
         specifier: workspace:^
         version: link:../../packages/tools-aws
+      '@cloud-agent/tools-git':
+        specifier: workspace:^
+        version: link:../../packages/tools-git
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -98,6 +101,9 @@ importers:
       '@cloud-agent/tools-aws':
         specifier: workspace:^
         version: link:../tools-aws
+      '@cloud-agent/tools-git':
+        specifier: workspace:^
+        version: link:../tools-git
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -278,6 +284,9 @@ importers:
       '@cloud-agent/contracts':
         specifier: workspace:^
         version: link:../contracts
+      '@cloud-agent/evidence':
+        specifier: workspace:^
+        version: link:../evidence
       zod:
         specifier: ^4.6.7
         version: 4.6.7

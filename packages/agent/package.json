@@ -12,6 +12,7 @@
     "@cloud-agent/evidence": "workspace:^",
     "@cloud-agent/graph": "workspace:^",
     "@cloud-agent/tools-aws": "workspace:^",
+    "@cloud-agent/tools-git": "workspace:^",
     "zod": "^4.6.7"
   },
   "devDependencies": {
