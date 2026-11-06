@@ -46,7 +46,7 @@ beforeEach(async () => {
     out: (t) => out.push(t),
     err: (t) => errs.push(t),
     readFile: async () => "",
-    readPort: async () => restaurantPort(),
+    session: async () => ({ read: restaurantPort() }),
     model: () => model,
   };
 });
@@ -152,11 +152,12 @@ describe("cloud-agent CLI", () => {
   });
 
   it("surfaces a credential/scope mismatch instead of discovering", async () => {
-    deps.readPort = async () =>
-      ({
+    deps.session = async () => ({
+      read: {
         ...restaurantPort(),
         context: { accountId: "999999999999", region: "us-east-1" },
-      }) as never;
+      } as never,
+    });
     expect(
       await runCli(
         ["connect", "--stack", "restaurant-app-prod", "--region", "us-east-1", "--role-arn", ROLE],

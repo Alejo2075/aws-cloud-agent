@@ -40,7 +40,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     });
 
   const refresh = async (p: ConnectionProfile, actor = deps.actor) => {
-    const port = await deps.readPort(p);
+    const { read: port } = await deps.session(p);
     const evidence = new FileEvidenceStore(evidenceDir(deps.home, p));
     const graph = await discoverSystem(p, port, evidence, { now: deps.now(), graphStore: graphs });
     await profiles.save({ ...p, lastDiscoveryAt: graph.builtAt });
@@ -180,9 +180,18 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     .action(async (words: string[], o) => {
       const p = await profiles.resolve(o.system, o.env);
       const question = words.join(" ");
+      const graph = await graphs.load(p);
+      const costTag = p.scope.tags[0];
+      const session = graph && p.costDataAccess !== undefined ? await deps.session(p) : undefined;
       const answer = await askSystem({
         question,
-        graph: await graphs.load(p),
+        graph,
+        ...(session?.observe && { observability: session.observe }),
+        policy: {
+          sensitiveDataAccess: p.sensitiveDataAccess,
+          costDataAccess: p.costDataAccess,
+          ...(costTag && { costTag }),
+        },
         evidence: new FileEvidenceStore(evidenceDir(deps.home, p)),
         model: (await graphs.load(p))
           ? deps.model(o.model, p.region)

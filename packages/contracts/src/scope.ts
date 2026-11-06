@@ -35,7 +35,10 @@ export const ConnectionProfile = z.object({
   region: AwsRegion,
   scope: ScopeSelectors,
   roles: RoleSet,
+  /** Allows log message content to reach the model. Off by default: telemetry can contain PII. */
   sensitiveDataAccess: z.boolean().default(false),
+  /** Allows Cost Explorer queries scoped to the connection's tag selector. */
+  costDataAccess: z.boolean().default(false),
   lastDiscoveryAt: z.iso.datetime().optional(),
 });
 export type ConnectionProfile = z.infer<typeof ConnectionProfile>;

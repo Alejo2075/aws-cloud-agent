@@ -5,7 +5,9 @@ import type { EvidenceStore } from "@cloud-agent/evidence";
 import type { ContentBlock, ModelMessage, ModelPort, ToolSpec } from "./model.js";
 import { SUBMIT_TOOL, SYSTEM_PROMPT } from "./prompt.js";
 import { graphTools } from "./tools.js";
-import type { AgentTool } from "./tools.js";
+import type { AgentTool, ToolPolicy } from "./tools.js";
+import { opsTools } from "./ops-tools.js";
+import type { ObservabilityPort } from "@cloud-agent/tools-aws";
 
 export interface AskOptions {
   question: string;
@@ -13,6 +15,8 @@ export interface AskOptions {
   evidence: EvidenceStore;
   model: ModelPort;
   tools?: AgentTool[];
+  observability?: ObservabilityPort;
+  policy?: Partial<ToolPolicy>;
   now?: Date;
   maxTurns?: number;
   maxToolCalls?: number;
@@ -49,7 +53,8 @@ export async function askSystem(opts: AskOptions): Promise<EvidenceBackedAnswer>
   if (!opts.graph) return noDataAnswer();
   const graph = opts.graph;
   const now = opts.now ?? new Date();
-  const tools = opts.tools ?? graphTools;
+  const tools = opts.tools ?? (opts.observability ? [...graphTools, ...opsTools] : graphTools);
+  const policy: ToolPolicy = { sensitiveDataAccess: false, costDataAccess: false, ...opts.policy };
   for (const t of tools)
     if (t.access !== "read")
       throw new Error(`tool ${t.name} is not read-only and cannot be used by ask`);
@@ -147,7 +152,16 @@ export async function askSystem(opts: AskOptions): Promise<EvidenceBackedAnswer>
           isError = true;
         } else {
           try {
-            const r = await tool.run({ graph, evidence: opts.evidence, now }, input.data);
+            const r = await tool.run(
+              {
+                graph,
+                evidence: opts.evidence,
+                now,
+                policy,
+                ...(opts.observability && { observability: opts.observability }),
+              },
+              input.data,
+            );
             for (const o of r.observations) exposed.set(o.id, o);
             text = wrapUntrusted(`tool:${tool.name}`, JSON.stringify(r.data));
           } catch (e) {

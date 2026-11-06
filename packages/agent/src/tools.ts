@@ -3,11 +3,21 @@ import type { Observation, SystemGraph } from "@cloud-agent/contracts";
 import type { EvidenceStore } from "@cloud-agent/evidence";
 import { findResource, impactOf, neighbors, summarize } from "@cloud-agent/graph";
 import { freshness } from "@cloud-agent/evidence";
+import type { ObservabilityPort } from "@cloud-agent/tools-aws";
+
+export interface ToolPolicy {
+  sensitiveDataAccess: boolean;
+  costDataAccess: boolean;
+  /** Tag selector usable for cost attribution, if the connection has one. */
+  costTag?: { key: string; value: string };
+}
 
 export interface ToolContext {
   graph: SystemGraph;
   evidence: EvidenceStore;
   now: Date;
+  policy: ToolPolicy;
+  observability?: ObservabilityPort;
 }
 
 export interface ToolResult {
