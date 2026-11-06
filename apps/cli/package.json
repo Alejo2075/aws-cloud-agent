@@ -1,0 +1,20 @@
+{
+  "name": "@cloud-agent/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cloud-agent/agent": "workspace:^",
+    "@cloud-agent/changes": "workspace:^",
+    "@cloud-agent/connections": "workspace:^",
+    "@cloud-agent/discovery": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^",
+    "@cloud-agent/manifest": "workspace:^",
+    "@cloud-agent/tools-aws": "workspace:^",
+    "commander": "^15.0.0"
+  }
+}
