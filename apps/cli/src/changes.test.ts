@@ -21,12 +21,14 @@ let repo: string;
 let template: string;
 let deploys: number;
 let actor = "alice";
+const quietObserver = { activeAlarms: async () => [] } as never;
 let port = restaurantPort();
 
 const plannerModel = (
   actions: object[] = [
     { kind: "update-config", resourceId: "fn", description: "timeout 10 -> 20" },
   ],
+  edits: object[] = [],
 ): ModelPort => ({
   async converse() {
     return {
@@ -38,6 +40,7 @@ const plannerModel = (
           name: "submit_plan",
           input: {
             actions,
+            edits,
             steps: ["edit stack", "deploy"],
             verification: [{ id: "v1", description: "timeout is 20", kind: "manual" }],
             rollback: { strategy: "revert and redeploy", reversible: true, requiresBackup: false },
@@ -76,7 +79,7 @@ beforeEach(async () => {
     out: (t) => out.push(t),
     err: (t) => errs.push(t),
     readFile: (p) => readFile(p, "utf8"),
-    session: async () => ({ read: port }),
+    session: async () => ({ read: port, observe: quietObserver }),
     model: () => plannerModel(),
     deployer: async () => deployer,
   } as CliDeps;
@@ -221,5 +224,122 @@ describe("change lifecycle through the CLI", () => {
       plannerModel([{ kind: "delete-stack", resourceId: "s", description: "remove" }]);
     await runCli(["plan", ...S, "Delete", "everything"], deps);
     expect(text()).toContain("state: BLOCKED");
+  });
+
+  it("applies a patch-carrying plan to an isolated branch, never touching the working tree", async () => {
+    await writeFile(join(repo, "stack.ts"), "timeout = 10;\n");
+    git(repo, "commit", "-qam", "baseline");
+    await writeFile(join(repo, "stack.ts"), "timeout = 20;\n");
+    const patch = `${git(repo, "diff").toString()}\n`;
+    git(repo, "checkout", "--", "stack.ts");
+    deps.model = () =>
+      plannerModel(
+        [{ kind: "update-code", resourceId: "fn", description: "raise timeout" }],
+        [{ path: "stack.ts", summary: "timeout 10 -> 20", patch }],
+      );
+    const cid = await planAndValidate([]);
+    await runCli(["changes", "approve", cid, ...S], deps);
+    out.length = 0;
+    expect(await runCli(["changes", "apply", cid, ...S], deps)).toBe(0);
+    expect(text()).toContain(`created branch cloud-agent/${cid}`);
+    expect(git(repo, "show", `cloud-agent/${cid}:stack.ts`).toString().trim()).toBe(
+      "timeout = 20;",
+    );
+    expect(await readFile(join(repo, "stack.ts"), "utf8")).toBe("timeout = 10;\n");
+    expect(deploys).toBe(0);
+  });
+
+  it("validates in CodeBuild when asked and emits lifecycle events without ever blocking", async () => {
+    const seen: string[] = [];
+    let project = "";
+    deps.codeBuildValidator = async (_p, name) => ({
+      validate: async () => {
+        project = name;
+        return { passed: true, report: "codebuild ok" };
+      },
+    });
+    deps.events = async () => ({
+      publish: async (e) => {
+        seen.push(String(e.to ?? e.type));
+      },
+    });
+    await runCli(["plan", ...S, "--template", template, "--stack", "app", "Set", "timeout"], deps);
+    const cid = id();
+    out.length = 0;
+    expect(await runCli(["changes", "validate", cid, ...S, "--codebuild", "proj-1"], deps)).toBe(0);
+    expect(project).toBe("proj-1");
+    expect(text()).toContain("AWAITING_APPROVAL");
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(seen).toEqual(
+      expect.arrayContaining(["VALIDATING", "AWAITING_APPROVAL", "change.approved"]),
+    );
+  });
+
+  it("explains how to apply a plan that carries neither a template nor patches", async () => {
+    const cid = await planAndValidate([]);
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(await runCli(["changes", "apply", cid, ...S], deps)).toBe(1);
+    expect(errs.join()).toContain("no template or patches");
+  });
+});
+
+describe("alarm health gate", () => {
+  it("blocks apply while alarms fire on in-scope resources and allows an audited acknowledgement", async () => {
+    deps.session = async () => ({
+      read: port,
+      observe: {
+        activeAlarms: async () => [{ name: "checkout-errors", reason: "x", resourceId: "fn" }],
+      } as never,
+    });
+    const cid = await planAndValidate();
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("1 alarm(s) firing: checkout-errors");
+    expect(deploys).toBe(0);
+    errs.length = 0;
+    expect(
+      await runCli(
+        ["changes", "apply", cid, ...S, "--template", template, "--ignore-alarms"],
+        deps,
+      ),
+    ).toBe(0);
+    expect(deploys).toBe(1);
+    out.length = 0;
+    await runCli(["audit"], deps);
+    expect(text()).toContain("change.alarms_acknowledged");
+  });
+});
+
+describe("alarm status that cannot be verified fails closed", () => {
+  it("blocks when there is no observability access or the read is denied, unless acknowledged and audited", async () => {
+    deps.session = async () => ({ read: port });
+    const cid = await planAndValidate();
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("alarm status UNVERIFIED: no observability access");
+    expect(deploys).toBe(0);
+
+    errs.length = 0;
+    deps.session = async () => ({
+      read: port,
+      observe: {
+        activeAlarms: async () => {
+          throw new Error("AccessDenied");
+        },
+      } as never,
+    });
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("alarms could not be read");
+
+    expect(
+      await runCli(
+        ["changes", "apply", cid, ...S, "--template", template, "--ignore-alarms"],
+        deps,
+      ),
+    ).toBe(0);
+    expect(deploys).toBe(1);
+    out.length = 0;
+    await runCli(["audit"], deps);
+    expect(text()).toContain("change.alarms_unverified_acknowledged");
   });
 });

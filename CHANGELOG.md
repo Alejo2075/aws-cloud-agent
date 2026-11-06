@@ -2,6 +2,22 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [0.3.0] - 2026-11-06 (prerelease)
+
+### Added
+
+- `GitBranchDeployer`: approved patches go to a new branch in an isolated worktree; optional push and PR; strict fail-closed patch parsing and verification of the staged file set.
+- `apps/api`: authenticated, authorized, rate-limited HTTP handlers (graph, ask, changes, approve, audit) and an API Gateway HTTP API adapter. No plan/apply over HTTP.
+- Hash-pinned plugin loader and `cloud-agent plugins add|list|remove`.
+- Alarm-based health gate (fails closed; composite alarms and truncated listings block; audited `--ignore-alarms`).
+- Step Functions and Kinesis resources in the graph and metric catalog.
+- CLI wiring: `changes validate --codebuild`, `connect --event-bus`, `--planning-role-arn`.
+
+### Security
+
+- Terraform checks are refused by the local (non-sandboxed) validator and block module downloads.
+- API returns identical 404s for missing systems and systems the caller has no grant on.
+
 ## [0.2.0] - 2026-11-06 (prerelease)
 
 ### Added

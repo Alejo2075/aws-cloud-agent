@@ -1,7 +1,7 @@
 # Architecture
 
 ```text
-CLI ──► policy/scope ──► agent (read-only tools) ──► System Graph + evidence ──► answer
+CLI / API ──► policy/scope ──► agent (read-only tools) ──► System Graph + evidence ──► answer
                     └─► change service ──► plan ─► validate ─► approval ─► policy.authorizeApply ─► deployer ─► verify
                                      every step ──► hash-chained audit log
 ```
@@ -16,20 +16,20 @@ CLI ──► policy/scope ──► agent (read-only tools) ──► System Gr
 
 ## Packages
 
-| Package       | Responsibility                                                        |
-| ------------- | --------------------------------------------------------------------- |
-| `contracts`   | Zod schemas: scope, connection, evidence, graph, source refs          |
-| `connections` | Scope evaluation                                                      |
-| `tools-aws`   | Read ports, SDK adapters, ARN helpers, metric catalog and bounds      |
-| `discovery`   | Bounded, concurrent discovery producing a `SystemGraph`               |
-| `graph`       | Stores (memory, file), queries, impact analysis, topology fingerprint |
-| `evidence`    | Redaction, freshness, evidence stores, audit log                      |
-| `manifest`    | `CloudSystemManifest` parse, schema, reconciliation                   |
-| `tools-git`   | Safe read-only repo access, IaC detection, source mapping             |
-| `agent`       | Tool contracts, ask loop, planner, Bedrock port                       |
-| `changes`     | Plan hashing, risk, state machine, policy, service, stores            |
-| `validation`  | Allowlisted command runner in a throwaway copy                        |
-| `deployments` | CloudFormation change-set deployer                                    |
+| Package       | Responsibility                                                                    |
+| ------------- | --------------------------------------------------------------------------------- |
+| `contracts`   | Zod schemas: scope, connection, evidence, graph, source refs                      |
+| `connections` | Scope evaluation                                                                  |
+| `tools-aws`   | Read ports, SDK adapters, ARN helpers, metric catalog and bounds                  |
+| `discovery`   | Bounded, concurrent discovery producing a `SystemGraph`                           |
+| `graph`       | Stores (memory, file), queries, impact analysis, topology fingerprint             |
+| `evidence`    | Redaction, freshness, evidence stores, audit log                                  |
+| `manifest`    | `CloudSystemManifest` parse, schema, reconciliation                               |
+| `tools-git`   | Safe read-only repo access, IaC detection, source mapping                         |
+| `agent`       | Tool contracts, ask loop, planner, Bedrock port                                   |
+| `changes`     | Plan hashing, risk, state machine, policy, service, stores                        |
+| `validation`  | Allowlisted command runner in a throwaway copy                                    |
+| `deployments` | CloudFormation change-set deployer, git branch/PR deployer, EventBridge publisher |
 
 ## Storage
 

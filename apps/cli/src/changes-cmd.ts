@@ -8,8 +8,9 @@ import type { ConnectionProfile, SystemGraph } from "@cloud-agent/contracts";
 import { FileEvidenceStore } from "@cloud-agent/evidence";
 import type { AuditLog } from "@cloud-agent/evidence";
 import { fingerprintGraph } from "@cloud-agent/graph";
-import { isStackHealthy } from "@cloud-agent/tools-aws";
+import { isStackHealthy, physicalIdFromArn } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
+import { GitBranchDeployer } from "@cloud-agent/deployments";
 import { LocalWorkerValidator } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
@@ -78,15 +79,18 @@ export function formatChange(r: ChangeRecord): string {
 
 export function registerChangeCommands(program: Command, c: ChangeCommandContext): void {
   const { deps } = c;
-  const service = async (p: ConnectionProfile) =>
-    new ChangeService({
+  const service = async (p: ConnectionProfile) => {
+    const events = await deps.events?.(p);
+    return new ChangeService({
       store: new FileChangeStore(
         join(deps.home, "changes", p.accountId, p.region, p.systemId, p.environment),
       ),
       audit: c.audit,
       policy: { writeRoleConfigured: !!p.roles.write },
+      ...(events && { events }),
       now: deps.now,
     });
+  };
 
   const locate = async (changeId: string, system: string, env?: string) => {
     const p = await c.profiles.resolve(system, env);
@@ -192,8 +196,22 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
       (v: string, p: string[]) => [...p, v],
       [] as string[],
     )
+    .option(
+      "--codebuild <project>",
+      "validate in an isolated CodeBuild project instead of a local copy",
+    )
     .action(async (id, o) => {
       const { p, svc } = await locate(id, o.system, o.env);
+      if (o.codebuild) {
+        if (!deps.codeBuildValidator)
+          throw new CliError("CodeBuild validation is not available in this environment");
+        const rec = await svc.validate(
+          id,
+          await deps.codeBuildValidator(p, o.codebuild),
+          deps.actor,
+        );
+        return deps.out(`${rec.validation?.report ?? ""}\n\nState: ${rec.state}`);
+      }
       if (!p.repository) throw new CliError("no repository linked");
       const allowed = (o.check as string[]).map((line, i) => {
         const [file, ...args] = line.trim().split(/\s+/);
@@ -201,7 +219,10 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
       });
       const rec = await svc.validate(
         id,
-        new LocalWorkerValidator({ repoPath: p.repository.path, allowed }),
+        new LocalWorkerValidator({
+          repoPath: p.repository.path,
+          allowed,
+        }),
         deps.actor,
       );
       deps.out(`${rec.validation?.report ?? ""}\n\nState: ${rec.state}`);
@@ -231,38 +252,109 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
     });
 
   common(changes.command("apply <changeId>"))
-    .requiredOption("--template <file>", "the exact template that was approved")
+    .option("--template <file>", "the exact template that was approved (plans that deploy a stack)")
+    .option("--push", "push the created branch to the remote (plans that carry patches)")
+    .option(
+      "--pr-base <branch>",
+      "open a pull request against this branch (requires --push and gh)",
+    )
+    .option(
+      "--ignore-alarms",
+      "proceed although alarms are firing on in-scope resources (recorded in the audit trail)",
+    )
     .action(async (id, o) => {
       const { p, svc } = await locate(id, o.system, o.env);
       const rec = await svc.get(id);
-      const artifact = rec.plan.artifact;
-      if (!artifact)
-        throw new CliError(
-          "this plan has no deployable artifact; apply it through your normal source/CI pipeline",
-        );
-      const body = await deps.readFile(o.template);
-      if (sha256(body) !== artifact.sha256)
-        throw new CliError(
-          "template does not match the sha256 bound to the approved plan; refusing to deploy",
-        );
       if (!p.repository) throw new CliError("no repository linked");
       const repo = await RepoReader.open(p.repository.path);
-      const deployer = await deps.deployer(p, {
-        stackName: artifact.stackName,
-        templateBody: body,
-      });
+      const artifact = rec.plan.artifact;
+      let deployer;
+      let stack: string | undefined;
+      if (artifact) {
+        if (!o.template)
+          throw new CliError("this plan deploys a stack; pass the approved --template");
+        const body = await deps.readFile(o.template);
+        if (sha256(body) !== artifact.sha256)
+          throw new CliError(
+            "template does not match the sha256 bound to the approved plan; refusing to deploy",
+          );
+        stack = artifact.stackName;
+        deployer = await deps.deployer(p, { stackName: artifact.stackName, templateBody: body });
+      } else if (rec.plan.edits.length) {
+        if (o.prBase && !o.push) throw new CliError("--pr-base requires --push");
+        deployer = new GitBranchDeployer({
+          repoPath: p.repository.path,
+          push: !!o.push,
+          ...(o.prBase && { pullRequest: { base: o.prBase } }),
+        });
+      } else {
+        throw new CliError(
+          "this plan has no template or patches to apply; use your normal pipeline",
+        );
+      }
       const preflight = {
         async check(plan: ChangeRecord["plan"]) {
           const r = await repo.revision();
           const fresh = await c.refresh(p);
-          const { read } = await deps.session(p);
-          const status = await read.getStackStatus(artifact.stackName);
+          const session = await deps.session(p);
+          const status = stack ? await session.read.getStackStatus(stack) : undefined;
+          const graph = await c.loadGraph(p);
+          const watched = (graph?.resources ?? []).flatMap((x) =>
+            x.arn
+              ? [
+                  {
+                    id: x.id,
+                    arn: x.arn,
+                    type: x.type,
+                    physicalId: physicalIdFromArn(x.arn, fresh),
+                  },
+                ]
+              : [],
+          );
+          // Alarm status is part of the health gate and fails closed: if it cannot be read, it is "unverified".
+          let alarms: Array<{ name: string }> = [];
+          let unverified: string | undefined;
+          if (!session.observe) unverified = "no observability access is configured";
+          else {
+            try {
+              alarms = await session.observe.activeAlarms(watched);
+            } catch (e) {
+              unverified = `alarms could not be read (${(e as Error).message})`;
+            }
+          }
+          const acknowledged = !!o.ignoreAlarms && (alarms.length > 0 || !!unverified);
+          if (acknowledged) {
+            await c.audit.append(
+              {
+                actor: deps.actor,
+                action: unverified
+                  ? "change.alarms_unverified_acknowledged"
+                  : "change.alarms_acknowledged",
+                systemId: p.systemId,
+                environment: p.environment,
+                planHash: plan.planHash,
+                outcome: "ok",
+                detail: { alarms: alarms.map((a) => a.name), unverified },
+              },
+              deps.now(),
+            );
+          }
+          const alarmsOk = (alarms.length === 0 && !unverified) || acknowledged;
+          const parts = [
+            status === undefined
+              ? "source-only change (no stack deployment)"
+              : `stack ${stack} is ${status}`,
+          ];
+          if (alarms.length)
+            parts.push(`${alarms.length} alarm(s) firing: ${alarms.map((a) => a.name).join(", ")}`);
+          if (unverified) parts.push(`alarm status UNVERIFIED: ${unverified}`);
+          if (acknowledged) parts.push("acknowledged by operator (--ignore-alarms)");
           return {
             sourceRevision: `${r.revision ?? "unknown"}${r.dirty ? "+dirty" : ""}`,
             driftDetected:
               !!plan.graphFingerprint && plan.graphFingerprint !== fingerprintGraph(fresh),
-            healthy: isStackHealthy(status),
-            healthDetail: `stack ${artifact.stackName} is ${status}`,
+            healthy: (status === undefined ? true : isStackHealthy(status)) && alarmsOk,
+            healthDetail: parts.join("; "),
           };
         },
       };

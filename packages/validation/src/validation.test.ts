@@ -124,3 +124,26 @@ describe("CodeBuildValidator (mocked)", () => {
     expect(cb.calls()).toHaveLength(0);
   });
 });
+
+describe("terraformChecks", () => {
+  it("never plans or applies and blocks module downloads", async () => {
+    const { terraformChecks } = await import("./index.js");
+    const all = terraformChecks().flatMap((c) => c.args);
+    expect(all).not.toContain("plan");
+    expect(all).not.toContain("apply");
+    expect(all).toEqual(expect.arrayContaining(["-backend=false", "-get=false"]));
+  });
+  it("refuses to run terraform in the non-sandboxed local validator", async () => {
+    const { terraformChecks } = await import("./index.js");
+    expect(
+      () => new LocalWorkerValidator({ repoPath: "/tmp", allowed: terraformChecks() }),
+    ).toThrow("isolated worker");
+    expect(
+      () =>
+        new LocalWorkerValidator({
+          repoPath: "/tmp",
+          allowed: [{ name: "x", file: "/usr/local/bin/tofu", args: [] }],
+        }),
+    ).toThrow("isolated worker");
+  });
+});

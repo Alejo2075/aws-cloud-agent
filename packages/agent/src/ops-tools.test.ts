@@ -50,6 +50,7 @@ const fake = (over: Partial<ObservabilityPort> = {}): ObservabilityPort => ({
     },
   ],
   resourceChanges: async () => [],
+  activeAlarms: async () => [],
   costByTag: async () => ({
     total: 4,
     unit: "USD",

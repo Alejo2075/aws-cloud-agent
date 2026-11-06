@@ -4,7 +4,7 @@ Source of truth for scope and order: `CLAUDE.md`. Constraint from the owner: **n
 
 Branch: `feat/foundation` (pushed). Last verified: typecheck, lint, format and 75 tests passing locally.
 
-## Done (v0.1.0 released; v0.2.0 candidate)
+## Done (v0.1.0 and v0.2.0 released; v0.3.0 candidate)
 
 - **M0**: pnpm workspace, strict TS (6.0.x), ESLint, Prettier, Vitest, CI, contracts, deny-by-default scope evaluation.
 - **M1**: scoped read-only discovery, System Graph with provenance, evidence + redaction, hash-chained audit, manifest import/reconcile + JSON Schema, Bedrock `ask` with citation validation, CLI.
@@ -15,11 +15,13 @@ Branch: `feat/foundation` (pushed). Last verified: typecheck, lint, format and 7
 - **v0.2.0 candidate**: stack health gate, configuration drift digests, CodeBuild validator (mocked), EventBridge lifecycle events (best-effort, audited failures), `ToolRegistry` for read-only plugin tools.
 - **Repo hardening**: pinned actions, CodeQL (a real ReDoS alert was found and fixed), `pnpm audit` in CI, branch protection on `main`, Dependabot alerts + security updates, secret scanning + push protection, private vulnerability reporting, least-privilege workflow tokens, tag-driven release workflow.
 
-Last verified locally: typecheck, lint, format, audit, 116 tests passing.
+- **v0.3.0 candidate**: git branch/PR deployer (strict patch validation, staged-set verification), HTTP API handlers + Lambda adapter, hash-pinned plugins, fail-closed alarm gate, Step Functions + Kinesis, CLI wiring for CodeBuild/events. Automated security review findings on these (patch-header bypass, Terraform init fetch, fail-open alarm gate) were all fixed with tests.
+
+Last verified locally: typecheck, lint, format, audit, 147 tests passing.
 
 ## Not done (see ROADMAP.md)
 
-Live verification in a test account; alarm/SLO health checks; branch/PR adapter and patch application; CLI wiring for CodeBuild and events; Terraform adapter; plugin discovery; `apps/api`; CDK stack for Cloud Agent itself; more resource types.
+Live verification in a test account; hosted deployment (stores, identity provider, CDK stack for Cloud Agent itself); SLO checks; REST API v1/ECS/RDS coverage; Terraform plan via isolated worker; out-of-process plugins.
 
 ## Not verified
 

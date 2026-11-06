@@ -57,7 +57,14 @@ function runOnce(cmd: AllowedCommand, cwd: string, timeoutMs: number, maxBytes: 
  * ephemeral isolated worker such as CodeBuild, which is documented but not implemented here.
  */
 export class LocalWorkerValidator implements Validator {
-  constructor(private readonly opts: RunnerOptions) {}
+  constructor(private readonly opts: RunnerOptions) {
+    // Tools that fetch and execute third-party code on init/plan need a network-controlled isolated worker.
+    const banned = opts.allowed.find((c) => /(^|\/)(terraform|tofu|terragrunt)$/.test(c.file));
+    if (banned)
+      throw new Error(
+        `${banned.file} cannot run in the local validator (it is not a sandbox); use an isolated worker such as CodeBuild`,
+      );
+  }
 
   async validate(plan: ChangePlan) {
     const dir = await mkdtemp(join(tmpdir(), `ca-validate-${plan.changeId}-`));
@@ -92,4 +99,26 @@ export class LocalWorkerValidator implements Validator {
       await rm(dir, { recursive: true, force: true });
     }
   }
+}
+
+/**
+ * Terraform checks for an ISOLATED worker only (e.g. a CodeBuild project with controlled egress and a provider mirror).
+ * They never run `plan` or `apply`, so they cannot reach state or AWS, but `terraform init` DOES download providers
+ * and run provider binaries, so they must never run on a developer machine or in the local validator, which is
+ * not a sandbox (LocalWorkerValidator refuses them). `-get=false` blocks module downloads: vendor modules instead.
+ */
+export function terraformChecks(): AllowedCommand[] {
+  return [
+    {
+      name: "terraform init (no backend, no module fetch)",
+      file: "terraform",
+      args: ["init", "-backend=false", "-get=false", "-input=false", "-no-color"],
+    },
+    { name: "terraform validate", file: "terraform", args: ["validate", "-no-color"] },
+    {
+      name: "terraform fmt -check",
+      file: "terraform",
+      args: ["fmt", "-check", "-recursive", "-no-color"],
+    },
+  ];
 }

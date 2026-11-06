@@ -2,7 +2,9 @@ import { ApiGatewayV2Client } from "@aws-sdk/client-apigatewayv2";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { KinesisClient } from "@aws-sdk/client-kinesis";
 import { LambdaClient } from "@aws-sdk/client-lambda";
+import { SFNClient } from "@aws-sdk/client-sfn";
 import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SNSClient } from "@aws-sdk/client-sns";
@@ -21,6 +23,8 @@ export interface AwsClients {
   events: EventBridgeClient;
   apigw: ApiGatewayV2Client;
   tagging: ResourceGroupsTaggingAPIClient;
+  sfn: SFNClient;
+  kinesis: KinesisClient;
 }
 
 export function createClients(
@@ -38,6 +42,8 @@ export function createClients(
     events: new EventBridgeClient(cfg),
     apigw: new ApiGatewayV2Client(cfg),
     tagging: new ResourceGroupsTaggingAPIClient(cfg),
+    sfn: new SFNClient(cfg),
+    kinesis: new KinesisClient(cfg),
   };
 }
 

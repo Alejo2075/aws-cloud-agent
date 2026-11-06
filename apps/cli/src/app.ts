@@ -1,7 +1,14 @@
-import { join, resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { Command, CommanderError } from "commander";
-import { askSystem } from "@cloud-agent/agent";
+import {
+  PluginConfig,
+  askSystem,
+  defaultToolRegistry,
+  loadPlugins,
+  sha256File,
+} from "@cloud-agent/agent";
 import { ConnectionProfile } from "@cloud-agent/contracts";
 import { discoverSystem } from "@cloud-agent/discovery";
 import { FileAuditLog, FileEvidenceStore, verifyChain } from "@cloud-agent/evidence";
@@ -117,7 +124,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         accountId: roleAccount(o.roleArn),
         region: o.region,
         scope: { stacks, resourceArns: o.arn, tags },
-        roles: { "read-only": o.roleArn, ...(o.writeRoleArn && { write: o.writeRoleArn }) },
+        roles: {
+          "read-only": o.roleArn,
+          ...(o.planningRoleArn && { "change-planning": o.planningRoleArn }),
+          ...(o.writeRoleArn && { write: o.writeRoleArn }),
+        },
+        ...(o.eventBus && { eventBusName: o.eventBus }),
         ...(o.repo && { repository: { path: resolve(o.repo) } }),
       });
       await profiles.save(profile);
@@ -191,7 +203,18 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       const graph = await graphs.load(p);
       const costTag = p.scope.tags[0];
       const session = graph && p.costDataAccess !== undefined ? await deps.session(p) : undefined;
+      const registry = defaultToolRegistry({ ops: !!session?.observe, repo: !!p.repository });
+      const pluginFile = join(deps.home, "plugins.json");
+      try {
+        const cfg = PluginConfig.parse(JSON.parse(await deps.readFile(pluginFile)));
+        const loaded = await loadPlugins(cfg, registry);
+        for (const e of loaded.errors) deps.err(`plugin not loaded (${e.path}): ${e.error}`);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT")
+          deps.err(`plugins.json ignored: ${(e as Error).message}`);
+      }
       const answer = await askSystem({
+        tools: registry.list(),
         question,
         graph,
         ...(p.repository && { repo: await RepoReader.open(p.repository.path) }),
@@ -224,6 +247,65 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       );
       deps.out(o.json ? JSON.stringify(answer, null, 2) : formatAnswer(answer));
     });
+
+  const plugins = program
+    .command("plugins")
+    .description("Manage hash-pinned read-only tool plugins");
+  const pluginFile = join(deps.home, "plugins.json");
+  const readPlugins = async (): Promise<PluginConfig> => {
+    try {
+      return PluginConfig.parse(JSON.parse(await deps.readFile(pluginFile)));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return { plugins: [] };
+      throw e;
+    }
+  };
+  plugins.command("list").action(async () => {
+    const cfg = await readPlugins();
+    if (!cfg.plugins.length) return deps.out("No plugins pinned.");
+    for (const x of cfg.plugins) deps.out(`${x.path}  sha256:${x.sha256}`);
+  });
+  plugins
+    .command("add <file>")
+    .description(
+      "Pin a plugin file by its current sha256 (plugins run in-process with your privileges; review the code first)",
+    )
+    .action(async (file) => {
+      const path = resolve(file);
+      const sha256 = await sha256File(path);
+      const cfg = await readPlugins();
+      await mkdir(dirname(pluginFile), { recursive: true });
+      await writeFile(
+        pluginFile,
+        JSON.stringify(
+          { plugins: [...cfg.plugins.filter((x) => x.path !== path), { path, sha256 }] },
+          null,
+          2,
+        ),
+        { mode: 0o600 },
+      );
+      await audit.append(
+        {
+          actor: deps.actor,
+          action: "plugin.pin",
+          systemId: "-",
+          outcome: "ok",
+          detail: { path, sha256 },
+        },
+        deps.now(),
+      );
+      deps.out(`Pinned ${path} (sha256 ${sha256}).`);
+    });
+  plugins.command("remove <file>").action(async (file) => {
+    const path = resolve(file);
+    const cfg = await readPlugins();
+    await writeFile(
+      pluginFile,
+      JSON.stringify({ plugins: cfg.plugins.filter((x) => x.path !== path) }, null, 2),
+      { mode: 0o600 },
+    );
+    deps.out(`Removed ${path}.`);
+  });
 
   program
     .command("audit")

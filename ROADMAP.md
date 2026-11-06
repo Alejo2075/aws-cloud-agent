@@ -1,13 +1,11 @@
 # Roadmap
 
-Done: M0 foundation, M1 read-only understanding, M2 operational intelligence, M3 controlled changes (v0.1.0); stack health gate, config drift, CodeBuild validator, lifecycle events, tool registry (v0.2.0). See CHANGELOG.
+Done: M0 foundation, M1 read-only understanding, M2 operational intelligence, M3 controlled changes (v0.1.0); stack health gate, config drift, CodeBuild validator, lifecycle events, tool registry (v0.2.0); branch/PR deployer, HTTP API handlers, plugin loader, alarm gate, Step Functions and Kinesis (v0.3.0). See CHANGELOG.
 
 Next, in priority order:
 
-1. **Live verification** in an isolated test account (explicit opt-in): discovery, `ask`, plan → apply → verify on a sample app.
-2. Health gate (alarms/stack status) and configuration-level drift detection.
-3. Branch/PR adapter and automatic patch application for source changes; isolated CodeBuild validation workers.
-4. More resource coverage (REST API, Step Functions, ECS, RDS, Kinesis) and X-Ray.
-5. Terraform plan adapter.
-6. Plugin discovery/loading and connection providers on top of `ToolRegistry`.
-7. Hosted API (`apps/api`) and a CDK stack for Cloud Agent itself, with DynamoDB/S3 stores.
+1. **Live verification** in an isolated test account (explicit opt-in from the account owner): discovery, `ask`, plan → apply → verify on a sample app. Nothing in this repository has been run against real AWS yet.
+2. Hosted deployment: DynamoDB/S3-backed stores, an identity provider integration for `apps/api`, and a CDK stack for Cloud Agent itself.
+3. SLO-based health checks and automatic verification of metric/HTTP criteria.
+4. More resource coverage (REST API v1, ECS, RDS, X-Ray) and Terraform plan support through an isolated worker.
+5. Plugin sandboxing (out-of-process plugins) and connection providers.

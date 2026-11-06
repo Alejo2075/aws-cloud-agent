@@ -28,6 +28,10 @@ export function arnFor(type: string, physicalId: string, ctx: AwsContext): strin
       return `arn:aws:apigateway:${region}::/apis/${physicalId}`;
     case "AWS::ApiGateway::RestApi":
       return `arn:aws:apigateway:${region}::/restapis/${physicalId}`;
+    case "AWS::StepFunctions::StateMachine":
+      return physicalId.startsWith("arn:") ? physicalId : undefined;
+    case "AWS::Kinesis::Stream":
+      return `arn:aws:kinesis:${region}:${a}:stream/${physicalId}`;
     default:
       return undefined;
   }
@@ -43,6 +47,8 @@ const TYPE_BY_ARN: Array<[RegExp, string]> = [
   [/^arn:aws:events:[^:]*:[^:]*:rule\//, "AWS::Events::Rule"],
   [/^arn:aws:apigateway:[^:]*::\/apis\//, "AWS::ApiGatewayV2::Api"],
   [/^arn:aws:apigateway:[^:]*::\/restapis\//, "AWS::ApiGateway::RestApi"],
+  [/^arn:aws:states:[^:]*:[^:]*:stateMachine:/, "AWS::StepFunctions::StateMachine"],
+  [/^arn:aws:kinesis:[^:]*:[^:]*:stream\//, "AWS::Kinesis::Stream"],
 ];
 
 export function typeFromArn(arn: string): string {
@@ -70,6 +76,10 @@ export function physicalIdFromArn(arn: string, ctx: AwsContext): string {
     case "AWS::ApiGatewayV2::Api":
     case "AWS::ApiGateway::RestApi":
       return arn.split("/").pop() ?? arn;
+    case "AWS::StepFunctions::StateMachine":
+      return arn;
+    case "AWS::Kinesis::Stream":
+      return (p[5] ?? "").replace(/^stream\//, "");
     default:
       return arn;
   }

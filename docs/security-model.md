@@ -69,6 +69,22 @@ Prefer a trust policy that restricts who can assume the role, and an `ExternalId
 
 Report vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 
+## Source-change branches
+
+`GitBranchDeployer` applies approved patches only to a new branch in a temporary git worktree, from the exact revision the plan was made against, and never to an existing branch or with force. Patch headers are parsed fail-closed (unknown, quoted or odd headers reject the patch); paths, secret-bearing files and file modes (symlinks, submodules, special modes) are checked both in the patch and again on what git actually staged, before committing. A failed run deletes the branch it created.
+
+## Plugins
+
+Plugins are code that runs in the Cloud Agent process with your privileges. The registry only limits what the _agent_ can call (read-only tools), not what plugin code can do. Entries must be absolute paths pinned by sha256 in `plugins.json`; a changed file is not loaded. Only pin plugins you have reviewed, shipped as a single bundled file (the hash covers the entry file only).
+
+## HTTP API
+
+Every route authenticates, authorizes per system and environment (deny by default), rate-limits per principal, bounds the body size, audits, and returns opaque 500s. Approval actors always come from the authenticated principal. A caller with no grant on a system gets the same 404 as for a missing system. Plan and apply are intentionally not exposed. Authentication (e.g. JWT verification) is injected by you; this repo ships none.
+
+## Terraform
+
+Cloud Agent never runs `terraform plan` or `apply`. `terraform init` downloads providers and runs their binaries, so the helper checks are for network-controlled isolated workers only and the local validator refuses them.
+
 ## Not covered yet
 
 The local validation runner is not a sandbox. Network egress controls, KMS-encrypted storage, multi-tenant hosting and a hosted API are out of scope for v0.1.0.

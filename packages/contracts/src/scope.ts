@@ -48,6 +48,8 @@ export const ConnectionProfile = z.object({
   /** Allows Cost Explorer queries scoped to the connection's tag selector. */
   costDataAccess: z.boolean().default(false),
   repository: RepositoryLink.optional(),
+  /** Optional EventBridge bus that receives change lifecycle events (identifiers and states only). */
+  eventBusName: z.string().min(1).optional(),
   lastDiscoveryAt: z.iso.datetime().optional(),
 });
 export type ConnectionProfile = z.infer<typeof ConnectionProfile>;
