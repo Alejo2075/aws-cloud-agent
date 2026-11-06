@@ -1,7 +1,7 @@
 {
   "name": "aws-cloud-agent",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
@@ -15,7 +15,8 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm lint && pnpm format && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm format && pnpm test",
+    "audit": "pnpm audit --audit-level moderate"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -34,5 +35,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Alejo2075/aws-cloud-agent.git"
+  },
+  "pnpm": {
+    "overrides": {
+      "minimatch": ">=11.0.1"
+    }
   }
 }

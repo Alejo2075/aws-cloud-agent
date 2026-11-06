@@ -10,6 +10,12 @@ All notable changes are documented here. Format based on Keep a Changelog; versi
 - Bedrock-backed `ask` with citation validation; metrics, logs, deployment history, cost, repository and IaC tools.
 - `CloudSystemManifest` v1 import, JSON Schema and reconciliation.
 - Change planning, plan-hash-bound approvals, policy gates, state machine, local validation runner, CloudFormation change-set deployer, `plan` / `changes` commands.
+- Apache-2.0 license, security model, CI with pinned actions, CodeQL, dependency audit, tag-driven release workflow.
+
+### Security
+
+- Change-set inspection is fully paginated and fails closed; destructive approvals are scoped per resource; client tokens derive from the full idempotency key.
+- `minimatch` pinned to a patched release via pnpm override (dev toolchain advisory).
 
 ### Known limitations
 
