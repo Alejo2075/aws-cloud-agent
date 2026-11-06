@@ -156,6 +156,10 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+    devDependencies:
+      aws-sdk-client-mock:
+        specifier: ^4.1.0
+        version: 4.1.0
 
   packages/discovery:
     dependencies:
@@ -299,15 +303,16 @@ importers:
       '@aws-sdk/client-codebuild':
         specifier: ^3.1163.0
         version: 3.1163.0
-      '@cloud-agent/changes':
-        specifier: workspace:^
-        version: link:../changes
       '@cloud-agent/contracts':
         specifier: workspace:^
         version: link:../contracts
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+    devDependencies:
+      '@cloud-agent/changes':
+        specifier: workspace:^
+        version: link:../changes
 
 packages:
 
