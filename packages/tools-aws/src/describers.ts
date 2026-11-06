@@ -12,6 +12,8 @@ import { DescribeContinuousBackupsCommand, DescribeTableCommand } from "@aws-sdk
 import { GetQueueAttributesCommand } from "@aws-sdk/client-sqs";
 import { GetBucketNotificationConfigurationCommand } from "@aws-sdk/client-s3";
 import { GetTopicAttributesCommand, ListSubscriptionsByTopicCommand } from "@aws-sdk/client-sns";
+import { DescribeStateMachineCommand } from "@aws-sdk/client-sfn";
+import { DescribeStreamSummaryCommand } from "@aws-sdk/client-kinesis";
 import { normalizeTargetArn } from "./arn.js";
 import type { AwsClients } from "./clients.js";
 import { AccessDeniedError } from "./port.js";
@@ -317,6 +319,123 @@ export async function describeQueue(c: AwsClients, t: DescribeTarget): Promise<R
   };
 }
 
+interface AslState {
+  Type?: string;
+  Resource?: string;
+  Parameters?: Record<string, unknown>;
+  Branches?: Array<{ States?: Record<string, AslState> }>;
+  ItemProcessor?: { States?: Record<string, AslState> };
+  Iterator?: { States?: Record<string, AslState> };
+}
+
+function* walkStates(states: Record<string, AslState> | undefined): Generator<AslState> {
+  for (const st of Object.values(states ?? {})) {
+    yield st;
+    for (const b of st.Branches ?? []) yield* walkStates(b.States);
+    yield* walkStates(st.ItemProcessor?.States);
+    yield* walkStates(st.Iterator?.States);
+  }
+}
+
+const lambdaArn = (v: string, region: string, account: string) => {
+  const m = /^(arn:aws:lambda:[^:]+:\d+:function:[^:]+)/.exec(v);
+  if (m) return m[1];
+  return /^[\w-]{1,64}$/.test(v) ? `arn:aws:lambda:${region}:${account}:function:${v}` : undefined;
+};
+
+export async function describeStateMachine(
+  c: AwsClients,
+  t: DescribeTarget,
+): Promise<ResourceDetail> {
+  const limitations: string[] = [];
+  let sm;
+  try {
+    sm = await c.sfn.send(new DescribeStateMachineCommand({ stateMachineArn: t.arn }));
+  } catch (e) {
+    if (isAccessDenied(e)) throw new AccessDeniedError("states:DescribeStateMachine", e);
+    throw e;
+  }
+  const [, , , region = "", account = ""] = t.arn.split(":");
+  const links: ResourceLink[] = [];
+  let dynamic = 0;
+  let def: { States?: Record<string, AslState> } = {};
+  try {
+    def = JSON.parse(sm.definition ?? "{}");
+  } catch {
+    limitations.push("state machine definition was not valid JSON; relationships unknown");
+  }
+  for (const st of walkStates(def.States)) {
+    if (st.Type !== "Task" || !st.Resource) continue;
+    const p = st.Parameters ?? {};
+    const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : undefined);
+    const hasDynamic = Object.keys(p).some((k) => k.endsWith(".$"));
+    const add = (to: string | undefined, kind: ResourceLink["kind"], why: string) =>
+      to ? links.push(...link(t.arn, to, kind, why)) : hasDynamic && dynamic++;
+    const r = st.Resource;
+    if (r.startsWith("arn:aws:lambda:"))
+      add(lambdaArn(r, region, account), "invokes", "state machine task");
+    else if (r === "arn:aws:states:::lambda:invoke")
+      add(lambdaArn(str("FunctionName") ?? "", region, account), "invokes", "lambda:invoke task");
+    else if (r.startsWith("arn:aws:states:::sqs:")) {
+      const url = str("QueueUrl");
+      const name = url?.split("/").pop();
+      add(
+        url && name ? `arn:aws:sqs:${region}:${url.split("/")[3] ?? account}:${name}` : undefined,
+        "publishes-to",
+        "sqs task",
+      );
+    } else if (r.startsWith("arn:aws:states:::sns:"))
+      add(str("TopicArn"), "publishes-to", "sns:publish task");
+    else if (r.startsWith("arn:aws:states:::dynamodb:")) {
+      const table = str("TableName");
+      add(
+        table ? `arn:aws:dynamodb:${region}:${account}:table/${table}` : undefined,
+        r.endsWith(":getItem") ? "reads-from" : "writes-to",
+        `${r.split(":::")[1] ?? "dynamodb"} task`,
+      );
+    } else if (r.startsWith("arn:aws:states:::states:startExecution"))
+      add(str("StateMachineArn"), "invokes", "nested execution");
+    else if (!r.startsWith("arn:aws:states:::")) add(undefined, "invokes", "");
+    else limitations.push(`task integration ${r} is not graphed`);
+  }
+  if (dynamic)
+    limitations.push(
+      `${dynamic} task target(s) are computed at runtime (.$ parameters) and cannot be graphed`,
+    );
+  return {
+    summary: {
+      type: sm.type,
+      status: sm.status,
+      roleArn: sm.roleArn,
+      tracing: sm.tracingConfiguration?.enabled ? "Active" : "Disabled",
+      loggingLevel: sm.loggingConfiguration?.level,
+    },
+    links,
+    limitations: [...new Set(limitations)],
+  };
+}
+
+export async function describeStream(c: AwsClients, t: DescribeTarget): Promise<ResourceDetail> {
+  let s;
+  try {
+    s = (await c.kinesis.send(new DescribeStreamSummaryCommand({ StreamName: t.physicalId })))
+      .StreamDescriptionSummary;
+  } catch (e) {
+    if (isAccessDenied(e)) throw new AccessDeniedError("kinesis:DescribeStreamSummary", e);
+    throw e;
+  }
+  return {
+    summary: {
+      mode: s?.StreamModeDetails?.StreamMode,
+      openShards: s?.OpenShardCount,
+      retentionHours: s?.RetentionPeriodHours,
+      encryption: s?.EncryptionType,
+    },
+    links: [],
+    limitations: [],
+  };
+}
+
 export const DESCRIBERS: Record<
   string,
   (c: AwsClients, t: DescribeTarget) => Promise<ResourceDetail>
@@ -328,4 +447,6 @@ export const DESCRIBERS: Record<
   "AWS::S3::Bucket": describeBucket,
   "AWS::DynamoDB::Table": describeTable,
   "AWS::SQS::Queue": describeQueue,
+  "AWS::StepFunctions::StateMachine": describeStateMachine,
+  "AWS::Kinesis::Stream": describeStream,
 };

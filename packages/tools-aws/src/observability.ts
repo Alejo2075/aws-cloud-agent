@@ -153,6 +153,29 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
     value: (r) => lastSegment(r.arn),
     metrics: ["NumberOfMessagesPublished", "NumberOfNotificationsFailed"],
   },
+  "AWS::StepFunctions::StateMachine": {
+    namespace: "AWS/States",
+    dimension: "StateMachineArn",
+    value: (r) => r.arn,
+    metrics: [
+      "ExecutionsStarted",
+      "ExecutionsSucceeded",
+      "ExecutionsFailed",
+      "ExecutionsTimedOut",
+      "ExecutionTime",
+    ],
+  },
+  "AWS::Kinesis::Stream": {
+    namespace: "AWS/Kinesis",
+    dimension: "StreamName",
+    value: (r) => r.physicalId,
+    metrics: [
+      "IncomingRecords",
+      "GetRecords.IteratorAgeMilliseconds",
+      "WriteProvisionedThroughputExceeded",
+      "ReadProvisionedThroughputExceeded",
+    ],
+  },
   "AWS::Events::Rule": {
     namespace: "AWS/Events",
     dimension: "RuleName",

@@ -203,3 +203,114 @@ describe("stack health", () => {
     expect(isStackHealthy("UPDATE_IN_PROGRESS")).toBe(false);
   });
 });
+
+describe("Step Functions and Kinesis", () => {
+  it("extracts targets from a state machine, including nested states, and flags dynamic ones", async () => {
+    const { mockClient: mc } = await import("aws-sdk-client-mock");
+    const { SFNClient, DescribeStateMachineCommand } = await import("@aws-sdk/client-sfn");
+    const sfn = mc(SFNClient);
+    const definition = JSON.stringify({
+      StartAt: "A",
+      States: {
+        A: {
+          Type: "Task",
+          Resource: "arn:aws:lambda:us-east-1:123456789012:function:direct:$LATEST",
+          Next: "P",
+        },
+        P: {
+          Type: "Parallel",
+          Branches: [
+            {
+              States: {
+                B: {
+                  Type: "Task",
+                  Resource: "arn:aws:states:::lambda:invoke",
+                  Parameters: { FunctionName: "confirm-reservation" },
+                },
+              },
+            },
+            {
+              States: {
+                C: {
+                  Type: "Task",
+                  Resource: "arn:aws:states:::sqs:sendMessage",
+                  Parameters: {
+                    QueueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/confirm-queue",
+                  },
+                },
+              },
+            },
+          ],
+          Next: "M",
+        },
+        M: {
+          Type: "Map",
+          ItemProcessor: {
+            States: {
+              D: {
+                Type: "Task",
+                Resource: "arn:aws:states:::dynamodb:getItem",
+                Parameters: { TableName: "reservations" },
+              },
+              E: {
+                Type: "Task",
+                Resource: "arn:aws:states:::sns:publish",
+                Parameters: { "TopicArn.$": "$.topic" },
+              },
+            },
+          },
+        },
+      },
+    });
+    sfn.on(DescribeStateMachineCommand).resolves({
+      definition,
+      type: "STANDARD",
+      status: "ACTIVE",
+      roleArn: "r",
+      stateMachineArn: "x",
+      name: "n",
+      creationDate: new Date(),
+    });
+    const arn = "arn:aws:states:us-east-1:123456789012:stateMachine:flow";
+    const d = await port.describeResource({
+      arn,
+      physicalId: arn,
+      type: "AWS::StepFunctions::StateMachine",
+    });
+    expect(d.links.map((l) => `${l.kind} ${l.to}`).sort()).toEqual([
+      "invokes arn:aws:lambda:us-east-1:123456789012:function:confirm-reservation",
+      "invokes arn:aws:lambda:us-east-1:123456789012:function:direct",
+      "publishes-to arn:aws:sqs:us-east-1:123456789012:confirm-queue",
+      "reads-from arn:aws:dynamodb:us-east-1:123456789012:table/reservations",
+    ]);
+    expect(d.limitations.join()).toContain("computed at runtime");
+  });
+
+  it("describes a Kinesis stream and round-trips its ARN", async () => {
+    const { mockClient: mc } = await import("aws-sdk-client-mock");
+    const { KinesisClient, DescribeStreamSummaryCommand } = await import("@aws-sdk/client-kinesis");
+    mc(KinesisClient)
+      .on(DescribeStreamSummaryCommand)
+      .resolves({
+        StreamDescriptionSummary: {
+          StreamName: "s",
+          StreamARN: "a",
+          StreamStatus: "ACTIVE",
+          StreamCreationTimestamp: new Date(),
+          RetentionPeriodHours: 24,
+          OpenShardCount: 2,
+          EnhancedMonitoring: [],
+          StreamModeDetails: { StreamMode: "PROVISIONED" },
+        },
+      });
+    const arn = arnFor("AWS::Kinesis::Stream", "orders", ctx)!;
+    expect(arn).toBe("arn:aws:kinesis:us-east-1:123456789012:stream/orders");
+    expect(physicalIdFromArn(arn, ctx)).toBe("orders");
+    const d = await port.describeResource({
+      arn,
+      physicalId: "orders",
+      type: "AWS::Kinesis::Stream",
+    });
+    expect(d.summary).toMatchObject({ mode: "PROVISIONED", openShards: 2, retentionHours: 24 });
+  });
+});
