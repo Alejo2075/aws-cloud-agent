@@ -5,7 +5,7 @@ import {
   GetIntegrationsCommand,
   GetRoutesCommand,
 } from "@aws-sdk/client-apigatewayv2";
-import { ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
+import { DescribeStacksCommand, ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import {
   GetFunctionConfigurationCommand,
   ListEventSourceMappingsCommand,
@@ -21,6 +21,7 @@ import {
   arnFor,
   normalizeTargetArn,
   physicalIdFromArn,
+  isStackHealthy,
 } from "./index.js";
 
 const ctx = { accountId: "123456789012", region: "us-east-1" };
@@ -185,5 +186,20 @@ describe("SdkAwsReadPort", () => {
   it("reports unsupported types honestly", async () => {
     const d = await port.describeResource({ arn: "x", physicalId: "x", type: "AWS::IAM::Role" });
     expect(d.limitations[0]).toContain("no describer");
+  });
+});
+
+describe("stack health", () => {
+  it("reads the stack status and classifies it", async () => {
+    cfn.on(DescribeStacksCommand).resolves({
+      Stacks: [
+        { StackName: "s", CreationTime: new Date(), StackStatus: "UPDATE_ROLLBACK_COMPLETE" },
+      ],
+    });
+    const status = await port.getStackStatus("s");
+    expect(status).toBe("UPDATE_ROLLBACK_COMPLETE");
+    expect(isStackHealthy(status)).toBe(false);
+    expect(["CREATE_COMPLETE", "UPDATE_COMPLETE"].every(isStackHealthy)).toBe(true);
+    expect(isStackHealthy("UPDATE_IN_PROGRESS")).toBe(false);
   });
 });

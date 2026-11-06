@@ -23,7 +23,29 @@ export interface Verifier {
 
 /** Fresh read-only look at the world immediately before a write. */
 export interface Preflight {
-  check(
-    plan: ChangePlan,
-  ): Promise<{ sourceRevision: string; driftDetected: boolean; healthy: boolean }>;
+  check(plan: ChangePlan): Promise<{
+    sourceRevision: string;
+    driftDetected: boolean;
+    healthy: boolean;
+    healthDetail?: string;
+  }>;
+}
+
+export interface LifecycleEvent {
+  type: "change.state-changed" | "change.approved";
+  changeId: string;
+  systemId: string;
+  environment: string;
+  accountId: string;
+  region: string;
+  planHash: string;
+  riskClass: string;
+  from?: string;
+  to?: string;
+  at: string;
+}
+
+/** Best-effort notifications for integrations (e.g. a chat console). Never carries evidence, code or secrets. */
+export interface EventPublisher {
+  publish(event: LifecycleEvent): Promise<void>;
 }

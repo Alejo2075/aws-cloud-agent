@@ -53,9 +53,9 @@ export function summarize(graph: SystemGraph) {
   };
 }
 
-/** Topology fingerprint (resource ids, types, edges). Configuration-level drift is not covered. */
+/** Fingerprint of topology (ids, types, edges) and stable configuration digests. */
 export function fingerprintGraph(graph: SystemGraph): string {
-  const rs = graph.resources.map((r) => `${r.id}|${r.type}`).sort();
+  const rs = graph.resources.map((r) => `${r.id}|${r.type}|${r.configDigest ?? ""}`).sort();
   const es = graph.edges.map((e) => `${e.from}|${e.kind}|${e.to}`).sort();
   return createHash("sha256")
     .update(JSON.stringify([rs, es]))

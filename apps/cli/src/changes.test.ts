@@ -21,6 +21,7 @@ let repo: string;
 let template: string;
 let deploys: number;
 let actor = "alice";
+let port = restaurantPort();
 
 const plannerModel = (
   actions: object[] = [
@@ -51,6 +52,7 @@ beforeEach(async () => {
   out = [];
   errs = [];
   deploys = 0;
+  port = restaurantPort();
   actor = "alice";
   repo = await mkdtemp(join(tmpdir(), "cli-repo-"));
   await writeFile(join(repo, "stack.ts"), "x");
@@ -74,7 +76,7 @@ beforeEach(async () => {
     out: (t) => out.push(t),
     err: (t) => errs.push(t),
     readFile: (p) => readFile(p, "utf8"),
-    session: async () => ({ read: restaurantPort() }),
+    session: async () => ({ read: port }),
     model: () => plannerModel(),
     deployer: async () => deployer,
   } as CliDeps;
@@ -203,6 +205,15 @@ describe("change lifecycle through the CLI", () => {
     await runCli(["changes", "approve", cid, ...S, "--elevated"], deps);
     expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(0);
     expect(deploys).toBe(1);
+  });
+
+  it("refuses to change a stack that is not healthy", async () => {
+    const cid = await planAndValidate();
+    await runCli(["changes", "approve", cid, ...S], deps);
+    port.stackStatuses["app"] = "UPDATE_ROLLBACK_COMPLETE";
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("stack app is UPDATE_ROLLBACK_COMPLETE");
+    expect(deploys).toBe(0);
   });
 
   it("blocks a delete-stack plan outright", async () => {

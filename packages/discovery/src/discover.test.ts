@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { ConnectionProfile } from "@cloud-agent/contracts";
 import { InMemoryEvidenceStore } from "@cloud-agent/evidence";
 import { AccessDeniedError } from "@cloud-agent/tools-aws";
-import { discoverSystem, ScopeMismatchError } from "./discover.js";
+import { fingerprintGraph } from "@cloud-agent/graph";
+import { configDigest, discoverSystem, ScopeMismatchError } from "./discover.js";
 import { A, FakeAwsReadPort, restaurantPort } from "./fixture.js";
 
 const profile = (scope: object = { stacks: ["restaurant-app-prod"] }) =>
@@ -92,5 +93,25 @@ describe("discoverSystem", () => {
     );
     expect(g.resources).toHaveLength(0);
     expect(g.gaps.some((x) => x.includes("outside the approved scope"))).toBe(true);
+  });
+});
+
+describe("configuration drift", () => {
+  it("ignores volatile counters but detects real configuration changes", async () => {
+    expect(configDigest({ timeout: 10, approximateItemCount: 1 })).toBe(
+      configDigest({ timeout: 10, approximateItemCount: 999 }),
+    );
+    expect(configDigest({ timeout: 10 })).not.toBe(configDigest({ timeout: 20 }));
+    const base = await discoverSystem(profile(), restaurantPort(), new InMemoryEvidenceStore());
+    const same = await discoverSystem(profile(), restaurantPort(), new InMemoryEvidenceStore());
+    expect(fingerprintGraph(same)).toBe(fingerprintGraph(base));
+    const changed = await discoverSystem(
+      profile(),
+      restaurantPort({
+        [A.table]: { summary: { billingMode: "PROVISIONED" }, limitations: [], links: [] },
+      }),
+      new InMemoryEvidenceStore(),
+    );
+    expect(fingerprintGraph(changed)).not.toBe(fingerprintGraph(base));
   });
 });

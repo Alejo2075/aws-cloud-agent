@@ -2,7 +2,7 @@
 
 Evidence-backed understanding of **existing** AWS applications, with approval-gated changes. Cloud Agent discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and (after explicit approval) apply changes to an application you already run.
 
-> **Status: v0.1.0 prerelease.** Everything is implemented and tested against fixtures and mocked AWS SDK clients. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
+> **Status: v0.2.0 prerelease.** Everything is implemented and tested against fixtures and mocked AWS SDK clients. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
 
 It is not a greenfield app generator and not an unrestricted AWS admin tool. Reads and writes are separated in code, roles and CLI.
 
@@ -74,11 +74,10 @@ Packages under `packages/`: `contracts` (Zod schemas), `connections` (scope), `t
 
 - **Not verified live.** No run against a real account, Bedrock, CodeBuild or CloudFormation. Expect integration bugs.
 - Resource coverage is limited to the services above; REST APIs (v1), Step Functions, ECS, RDS and others are listed without configuration or edges, and the graph reports this as a gap.
-- Drift detection compares **topology** only, not resource configuration.
-- The "environment healthy" gate always passes; there is no alarm/health check yet.
-- The local validation worker is a convenience, not a sandbox. Isolated CodeBuild workers are not implemented.
+- Drift detection covers topology and the stable configuration summary of supported resources; resources without a describer are not covered. The health gate checks CloudFormation stack status only (no alarm or SLO checks).
+- The local validation worker is a convenience, not a sandbox. `CodeBuildValidator` exists for isolated builds but is only tested with mocks and is not yet selectable from the CLI.
 - The planner proposes plans and edits as data; automatic application of code patches to a branch/PR is not implemented. Deployment is by CloudFormation change set from a template you supply, bound to the approved plan by sha256.
-- Terraform is detected but has no plan/apply adapter. No hosted API (`apps/api`), CDK stack for Cloud Agent itself, plugin loader or EventBridge lifecycle events yet. See [ROADMAP](ROADMAP.md).
+- Terraform is detected but has no plan/apply adapter. No hosted API (`apps/api`), CDK stack for Cloud Agent itself, plugin discovery/loading (a `ToolRegistry` API exists) or CLI wiring for lifecycle events yet. See [ROADMAP](ROADMAP.md).
 - Verification of metric/HTTP criteria is manual (`--confirm`).
 
 ## Contributing

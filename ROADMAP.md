@@ -1,6 +1,6 @@
 # Roadmap
 
-Done in v0.1.0: M0 foundation, M1 read-only understanding, M2 operational intelligence, M3 controlled changes (see CHANGELOG).
+Done: M0 foundation, M1 read-only understanding, M2 operational intelligence, M3 controlled changes (v0.1.0); stack health gate, config drift, CodeBuild validator, lifecycle events, tool registry (v0.2.0). See CHANGELOG.
 
 Next, in priority order:
 
@@ -9,5 +9,5 @@ Next, in priority order:
 3. Branch/PR adapter and automatic patch application for source changes; isolated CodeBuild validation workers.
 4. More resource coverage (REST API, Step Functions, ECS, RDS, Kinesis) and X-Ray.
 5. Terraform plan adapter.
-6. Plugin loading for third-party tools and connection providers; EventBridge lifecycle events.
+6. Plugin discovery/loading and connection providers on top of `ToolRegistry`.
 7. Hosted API (`apps/api`) and a CDK stack for Cloud Agent itself, with DynamoDB/S3 stores.

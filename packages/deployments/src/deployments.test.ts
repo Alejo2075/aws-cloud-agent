@@ -10,7 +10,8 @@ import {
 } from "@aws-sdk/client-cloudformation";
 import { authorizeApply, finalizePlan } from "@cloud-agent/changes";
 import type { Authorization, ChangeRecord } from "@cloud-agent/changes";
-import { CfnChangeSetDeployer } from "./index.js";
+import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { CfnChangeSetDeployer, EventBridgePublisher } from "./index.js";
 
 const cfn = mockClient(CloudFormationClient);
 beforeEach(() => cfn.reset());
@@ -228,5 +229,43 @@ describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
     const wrongTarget = { ...auth(), accountId: "999999999999" } as Authorization;
     expect((await deployer().apply(other, wrongTarget)).detail).toContain("differs");
     expect(cfn.calls()).toHaveLength(0);
+  });
+});
+
+describe("EventBridgePublisher (mocked)", () => {
+  const eb = mockClient(EventBridgeClient);
+  it("publishes identifiers only and reports rejected entries", async () => {
+    eb.reset();
+    eb.on(PutEventsCommand).resolves({ FailedEntryCount: 0, Entries: [{ EventId: "e" }] });
+    const pub = new EventBridgePublisher({
+      client: new EventBridgeClient({ region: "us-east-1" }),
+      eventBusName: "bus",
+    });
+    const ev = {
+      type: "change.state-changed" as const,
+      changeId: "c",
+      systemId: "s",
+      environment: "e",
+      accountId: "123456789012",
+      region: "us-east-1",
+      planHash: "h",
+      riskClass: "routine",
+      to: "APPLYING",
+      at: "t",
+    };
+    await pub.publish(ev);
+    const entry = eb.commandCalls(PutEventsCommand)[0]!.args[0].input.Entries![0]!;
+    expect(entry).toMatchObject({
+      EventBusName: "bus",
+      Source: "cloud-agent",
+      DetailType: "change.state-changed",
+    });
+    expect(JSON.parse(entry.Detail!)).toEqual(ev);
+    eb.reset();
+    eb.on(PutEventsCommand).resolves({
+      FailedEntryCount: 1,
+      Entries: [{ ErrorMessage: "denied" }],
+    });
+    await expect(pub.publish(ev)).rejects.toThrow("denied");
   });
 });

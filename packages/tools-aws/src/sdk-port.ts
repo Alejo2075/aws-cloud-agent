@@ -1,4 +1,4 @@
-import { ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
+import { DescribeStacksCommand, ListStackResourcesCommand } from "@aws-sdk/client-cloudformation";
 import { GetResourcesCommand } from "@aws-sdk/client-resource-groups-tagging-api";
 import { createClients } from "./clients.js";
 import type { AwsClients } from "./clients.js";
@@ -87,5 +87,15 @@ export class SdkAwsReadPort implements AwsReadPort {
       };
     }
     return describer(this.clients, target);
+  }
+
+  async getStackStatus(stack: string): Promise<string> {
+    try {
+      const r = await this.clients.cfn.send(new DescribeStacksCommand({ StackName: stack }));
+      return r.Stacks?.[0]?.StackStatus ?? "UNKNOWN";
+    } catch (e) {
+      if (isAccessDenied(e)) throw new AccessDeniedError("cloudformation:DescribeStacks", e);
+      throw e;
+    }
   }
 }

@@ -4,7 +4,14 @@ import { finalizePlan } from "./plan.js";
 import type { ChangePlan } from "./plan.js";
 import { authorizeApply } from "./policy.js";
 import type { PolicyConfig } from "./policy.js";
-import type { Deployer, Preflight, Validator, Verifier } from "./ports.js";
+import type {
+  Deployer,
+  EventPublisher,
+  LifecycleEvent,
+  Preflight,
+  Validator,
+  Verifier,
+} from "./ports.js";
 import { transition } from "./state.js";
 import type { ChangeRecord, ChangeState } from "./state.js";
 import type { ChangeStore } from "./store.js";
@@ -15,6 +22,7 @@ export interface ChangeServiceDeps {
   store: ChangeStore;
   audit: AuditLog;
   policy: PolicyConfig;
+  events?: EventPublisher;
   now?: () => Date;
 }
 
@@ -30,6 +38,43 @@ export class ChangeService {
   constructor(private readonly d: ChangeServiceDeps) {}
   private now() {
     return this.d.now?.() ?? new Date();
+  }
+
+  private async emit(
+    rec: ChangeRecord,
+    type: LifecycleEvent["type"],
+    extra: Partial<LifecycleEvent> = {},
+  ) {
+    if (!this.d.events) return;
+    const p = rec.plan;
+    const event: LifecycleEvent = {
+      type,
+      changeId: p.changeId,
+      systemId: p.systemId,
+      environment: p.environment,
+      accountId: p.accountId,
+      region: p.region,
+      planHash: p.planHash,
+      riskClass: p.riskClass,
+      at: this.now().toISOString(),
+      ...extra,
+    };
+    try {
+      await this.d.events.publish(event);
+    } catch (e) {
+      // Notifications must never fail or block a change; record the miss instead.
+      await this.d.audit.append(
+        {
+          actor: "system",
+          action: "event.publish_failed",
+          systemId: p.systemId,
+          environment: p.environment,
+          outcome: "error",
+          detail: { changeId: p.changeId, type, error: (e as Error).message },
+        },
+        this.now(),
+      );
+    }
   }
 
   private async load(id: string): Promise<ChangeRecord> {
@@ -60,6 +105,7 @@ export class ChangeService {
       },
       this.now(),
     );
+    await this.emit(next, "change.state-changed", { from: rec.state, to });
     return next;
   }
 
@@ -146,6 +192,7 @@ export class ChangeService {
       },
       now,
     );
+    await this.emit(next, "change.approved");
     return next;
   }
 

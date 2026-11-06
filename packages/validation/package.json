@@ -12,6 +12,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@cloud-agent/changes": "workspace:^"
+    "@cloud-agent/changes": "workspace:^",
+    "aws-sdk-client-mock": "^4.1.0"
   }
 }

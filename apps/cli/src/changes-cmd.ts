@@ -8,6 +8,7 @@ import type { ConnectionProfile, SystemGraph } from "@cloud-agent/contracts";
 import { FileEvidenceStore } from "@cloud-agent/evidence";
 import type { AuditLog } from "@cloud-agent/evidence";
 import { fingerprintGraph } from "@cloud-agent/graph";
+import { isStackHealthy } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { LocalWorkerValidator } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
@@ -254,11 +255,14 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
         async check(plan: ChangeRecord["plan"]) {
           const r = await repo.revision();
           const fresh = await c.refresh(p);
+          const { read } = await deps.session(p);
+          const status = await read.getStackStatus(artifact.stackName);
           return {
             sourceRevision: `${r.revision ?? "unknown"}${r.dirty ? "+dirty" : ""}`,
             driftDetected:
               !!plan.graphFingerprint && plan.graphFingerprint !== fingerprintGraph(fresh),
-            healthy: true,
+            healthy: isStackHealthy(status),
+            healthDetail: `stack ${artifact.stackName} is ${status}`,
           };
         },
       };

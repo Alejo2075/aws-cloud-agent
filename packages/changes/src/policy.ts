@@ -26,6 +26,8 @@ export interface LiveState {
   driftDetected: boolean;
   /** True when the target environment is healthy enough to change. */
   healthy: boolean;
+  /** What the health check observed, shown in the refusal reason. */
+  healthDetail?: string;
 }
 
 export interface PolicyConfig {
@@ -104,7 +106,10 @@ export function authorizeApply(
     reasons.push("live resources drifted since the plan was made");
     stale = true;
   }
-  if (!live.healthy) reasons.push("target environment is unhealthy; refusing to change it");
+  if (!live.healthy)
+    reasons.push(
+      `target environment is unhealthy${live.healthDetail ? ` (${live.healthDetail})` : ""}; refusing to change it`,
+    );
 
   if (reasons.length) return { allowed: false, stale, reasons };
   const authorization = {
