@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   CloudFormationClient,
   CreateChangeSetCommand,
@@ -25,6 +26,7 @@ export interface CfnDeployerOptions {
   maxPolls?: number;
 }
 
+const MAX_CHANGE_PAGES = 50;
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
@@ -64,7 +66,8 @@ export class CfnChangeSetDeployer implements Deployer {
         ChangeSetType: "UPDATE",
         TemplateBody: templateBody,
         ...(iamAllowed && { Capabilities: ["CAPABILITY_IAM"] }),
-        ClientToken: auth.idempotencyKey.slice(-32).replace(/[^A-Za-z0-9]/g, "a"),
+        // Hash of the full key (change, plan hash, account, region, environment): distinct per change, valid charset.
+        ClientToken: createHash("sha256").update(auth.idempotencyKey).digest("hex"),
       }),
     );
 
@@ -91,20 +94,51 @@ export class CfnChangeSetDeployer implements Deployer {
         : { status: "failed", detail: `change set failed: ${cs.StatusReason ?? "unknown"}` };
     }
 
-    const declaredDestructive = plan.actions.some(
-      (a) => a.kind === "delete-resource" || a.kind === "data-migration",
-    );
-    const risky = (cs.Changes ?? []).filter(
-      (c) =>
-        c.ResourceChange?.Action === "Remove" ||
-        c.ResourceChange?.Replacement === "True" ||
-        c.ResourceChange?.Replacement === "Conditional",
-    );
-    if (risky.length && !declaredDestructive) {
+    // Enumerate EVERY page of changes before judging risk; if that is impossible, fail closed.
+    const changes = [...(cs.Changes ?? [])];
+    try {
+      let next = cs.NextToken;
+      for (let pages = 0; next; pages++) {
+        if (pages >= MAX_CHANGE_PAGES) throw new Error("change set has too many pages to inspect");
+        const page = await this.o.client.send(
+          new DescribeChangeSetCommand({
+            StackName: stackName,
+            ChangeSetName: name,
+            NextToken: next,
+          }),
+        );
+        changes.push(...(page.Changes ?? []));
+        next = page.NextToken;
+      }
+    } catch (e) {
       await this.o.client
         .send(new DeleteChangeSetCommand({ StackName: stackName, ChangeSetName: name }))
         .catch(() => undefined);
-      const list = risky
+      return {
+        status: "failed",
+        detail: `refused: could not enumerate every change in the change set (${(e as Error).message}); nothing was executed`,
+      };
+    }
+
+    // Each removal/replacement must be individually declared by a destructive action in the approved plan.
+    const declared = plan.actions
+      .filter((a) => a.kind === "delete-resource" || a.kind === "data-migration")
+      .map((a) => a.resourceId);
+    const undeclared = changes.filter((c) => {
+      const rc = c.ResourceChange;
+      const risky =
+        rc?.Action === "Remove" || rc?.Replacement === "True" || rc?.Replacement === "Conditional";
+      if (!risky) return false;
+      const ids = [rc?.LogicalResourceId, rc?.PhysicalResourceId].filter((x): x is string => !!x);
+      return !ids.some((id) =>
+        declared.some((d) => d === id || d.endsWith(`/${id}`) || d.endsWith(`:${id}`)),
+      );
+    });
+    if (undeclared.length) {
+      await this.o.client
+        .send(new DeleteChangeSetCommand({ StackName: stackName, ChangeSetName: name }))
+        .catch(() => undefined);
+      const list = undeclared
         .map(
           (c) =>
             `${c.ResourceChange?.Action} ${c.ResourceChange?.LogicalResourceId} (${c.ResourceChange?.ResourceType})`,
@@ -112,7 +146,7 @@ export class CfnChangeSetDeployer implements Deployer {
         .join(", ");
       return {
         status: "failed",
-        detail: `refused: change set removes or replaces resources the approved plan did not declare: ${list}`,
+        detail: `refused: change set removes or replaces resources the approved plan did not individually declare: ${list}`,
       };
     }
 

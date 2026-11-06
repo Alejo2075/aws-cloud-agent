@@ -15,7 +15,7 @@ import { CfnChangeSetDeployer } from "./index.js";
 const cfn = mockClient(CloudFormationClient);
 beforeEach(() => cfn.reset());
 
-const plan = (kind = "update-config") =>
+const plan = (kind = "update-config", resourceId = "x") =>
   finalizePlan({
     changeId: "chg1",
     systemId: "s",
@@ -26,7 +26,7 @@ const plan = (kind = "update-config") =>
     intent: "i",
     sourceRevision: "r",
     graphBuiltAt: "2026-11-06T00:00:00.000Z",
-    actions: [{ kind, resourceId: "x", description: "d" }],
+    actions: [{ kind, resourceId, description: "d" }],
     steps: ["s"],
     verification: [{ id: "v", description: "d", kind: "test" }],
     rollback: { strategy: "revert", reversible: true, requiresBackup: kind === "delete-resource" },
@@ -117,7 +117,7 @@ describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
   });
 
   it("allows removals only when the plan declared a destructive action", async () => {
-    const p = plan("delete-resource");
+    const p = plan("delete-resource", "Old");
     cfn.on(CreateChangeSetCommand).resolves({});
     cfn.on(DescribeChangeSetCommand).resolves({
       Status: "CREATE_COMPLETE",
@@ -128,6 +128,75 @@ describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
       Stacks: [{ StackName: "app", CreationTime: new Date(), StackStatus: "UPDATE_COMPLETE" }],
     });
     expect((await deployer().apply(p, auth(p))).status).toBe("succeeded");
+  });
+
+  it("scopes a destructive approval to the resources it names", async () => {
+    const p = plan("delete-resource", "Old");
+    cfn.on(CreateChangeSetCommand).resolves({});
+    cfn.on(DescribeChangeSetCommand).resolves({
+      Status: "CREATE_COMPLETE",
+      Changes: [
+        { ResourceChange: { Action: "Remove", LogicalResourceId: "Old" } },
+        {
+          ResourceChange: {
+            Action: "Remove",
+            LogicalResourceId: "ProdTable",
+            ResourceType: "AWS::DynamoDB::Table",
+          },
+        },
+      ],
+    });
+    cfn.on(DeleteChangeSetCommand).resolves({});
+    const r = await deployer().apply(p, auth(p));
+    expect(r.status).toBe("failed");
+    expect(r.detail).toContain("ProdTable");
+    expect(cfn.commandCalls(ExecuteChangeSetCommand)).toHaveLength(0);
+  });
+
+  it("inspects every page of changes and fails closed when a page cannot be read", async () => {
+    cfn.on(CreateChangeSetCommand).resolves({});
+    cfn.on(DeleteChangeSetCommand).resolves({});
+    cfn
+      .on(DescribeChangeSetCommand)
+      .resolvesOnce({
+        Status: "CREATE_COMPLETE",
+        NextToken: "p2",
+        Changes: [
+          { ResourceChange: { Action: "Modify", Replacement: "False", LogicalResourceId: "Fn" } },
+        ],
+      })
+      .resolvesOnce({
+        Status: "CREATE_COMPLETE",
+        Changes: [{ ResourceChange: { Action: "Remove", LogicalResourceId: "HiddenOnPage2" } }],
+      });
+    const r = await deployer().apply(plan(), auth());
+    expect(r.detail).toContain("HiddenOnPage2");
+    expect(cfn.commandCalls(ExecuteChangeSetCommand)).toHaveLength(0);
+
+    cfn.reset();
+    cfn.on(CreateChangeSetCommand).resolves({});
+    cfn.on(DeleteChangeSetCommand).resolves({});
+    cfn
+      .on(DescribeChangeSetCommand)
+      .resolvesOnce({ Status: "CREATE_COMPLETE", NextToken: "p2", Changes: [] })
+      .rejects(new Error("throttled"));
+    const failed = await deployer().apply(plan(), auth());
+    expect(failed.status).toBe("failed");
+    expect(failed.detail).toContain("could not enumerate");
+    expect(cfn.commandCalls(ExecuteChangeSetCommand)).toHaveLength(0);
+  });
+
+  it("derives a valid, distinct client token from the whole idempotency key", async () => {
+    cfn.on(CreateChangeSetCommand).resolves({});
+    cfn
+      .on(DescribeChangeSetCommand)
+      .resolves({ Status: "FAILED", StatusReason: "didn't contain changes" });
+    cfn.on(DeleteChangeSetCommand).resolves({});
+    await deployer().apply(plan("update-config", "a"), auth(plan("update-config", "a")));
+    await deployer().apply(plan("update-config", "b"), auth(plan("update-config", "b")));
+    const tokens = cfn.commandCalls(CreateChangeSetCommand).map((c) => c.args[0].input.ClientToken);
+    expect(tokens[0]).toMatch(/^[0-9a-f]{64}$/);
+    expect(tokens[0]).not.toBe(tokens[1]);
   });
 
   it("treats an empty change set as success and a rollback as failure with a data warning", async () => {
