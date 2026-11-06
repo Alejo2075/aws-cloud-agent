@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -45,7 +45,7 @@ beforeEach(async () => {
     now: () => new Date(),
     out: (t) => out.push(t),
     err: (t) => errs.push(t),
-    readFile: async () => "",
+    readFile: (p) => readFile(p, "utf8"),
     session: async () => ({ read: restaurantPort() }),
     model: () => model,
     deployer: async () => {
@@ -173,5 +173,59 @@ describe("cloud-agent CLI", () => {
   it("has no top-level apply or deploy shortcut", async () => {
     for (const c of ["plan", "changes", "apply", "deploy"])
       expect(await runCli([c], deps)).not.toBe(0);
+  });
+
+  it("pins, lists, loads and removes plugins; a tampered plugin is reported and not loaded", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pl-"));
+    const file = join(dir, "p.mjs");
+    await writeFile(
+      file,
+      'export function createTools({ z, defineTool }) { return [defineTool({ name: "ticket_lookup", description: "d", access: "read", input: z.object({}), run: async () => ({ data: {}, observations: [] }) })]; }',
+    );
+    expect(await runCli(["plugins", "add", file], deps)).toBe(0);
+    out.length = 0;
+    await runCli(["plugins", "list"], deps);
+    expect(text()).toContain(file);
+    await runCli(
+      [
+        "connect",
+        "--stack",
+        "restaurant-app-prod",
+        "--region",
+        "us-east-1",
+        "--role-arn",
+        ROLE,
+        "--system",
+        "restaurant-app",
+      ],
+      deps,
+    );
+    let offered: string[] = [];
+    deps.model = () => ({
+      converse: async (req) => {
+        offered = req.tools.map((t) => t.name);
+        return {
+          stopReason: "tool_use",
+          content: [
+            {
+              type: "toolUse",
+              id: "1",
+              name: "submit_answer",
+              input: { answer: "ok", citedObservationIds: [], hypotheses: [], limitations: [] },
+            },
+          ],
+        };
+      },
+    });
+    await runCli(["ask", "--system", "restaurant-app", "hi"], deps);
+    expect(offered).toContain("ticket_lookup");
+    await writeFile(file, "export const tampered = true;");
+    errs.length = 0;
+    await runCli(["ask", "--system", "restaurant-app", "hi"], deps);
+    expect(errs.join()).toContain("sha256 mismatch");
+    out.length = 0;
+    await runCli(["plugins", "remove", file], deps);
+    await runCli(["plugins", "list"], deps);
+    expect(text()).toContain("No plugins pinned.");
   });
 });
