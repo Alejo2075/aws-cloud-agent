@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { SystemGraph } from "@cloud-agent/contracts";
-import { RepoAccessError, RepoReader, detectIac, mapResourcesToSource } from "./index.js";
+import {
+  RepoAccessError,
+  RepoReader,
+  detectIac,
+  isSecretFile,
+  mapResourcesToSource,
+} from "./index.js";
 
 let root: string;
 let repo: RepoReader;
@@ -103,5 +109,37 @@ describe("IaC detection and source mapping", () => {
     const d = await detectIac(empty);
     expect(d.kind).toBe("unknown");
     expect(d.notes.join()).toContain("no IaC definitions");
+  });
+});
+
+describe("isSecretFile", () => {
+  it("flags secret-bearing names and nothing else", () => {
+    for (const f of [
+      ".env",
+      "a/.env.local",
+      "k/server.PEM",
+      "x/id_rsa",
+      "id_rsa.pub",
+      "aws/credentials",
+      "t/terraform.tfstate",
+      "t/a.tfstate.backup",
+      "prod.tfvars",
+      "k.key",
+    ])
+      expect(isSecretFile(f)).toBe(true);
+    for (const f of [
+      "src/env.ts",
+      "README.md",
+      "lib/credentials-helper.ts",
+      "monkey.ts",
+      "keyboard.ts",
+    ])
+      expect(isSecretFile(f)).toBe(false);
+  });
+  it("runs in linear time on hostile paths", () => {
+    const hostile = "/a".repeat(200_000) + "/.env.";
+    const t = Date.now();
+    isSecretFile(hostile);
+    expect(Date.now() - t).toBeLessThan(200);
   });
 });

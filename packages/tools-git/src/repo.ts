@@ -16,8 +16,17 @@ const SKIP_DIRS = new Set([
   "__pycache__",
   ".venv",
 ]);
-const SECRET_FILE =
-  /(^|\/)(\.env(\..*)?|.*\.pem|.*\.key|id_rsa.*|credentials|.*\.tfstate(\.backup)?|.*\.tfvars)$/i;
+/** Name-based check with plain string operations (no regex), so hostile paths cannot cause slow matching. */
+export function isSecretFile(relPath: string): boolean {
+  const base = (relPath.split("/").pop() ?? "").toLowerCase();
+  return (
+    base === ".env" ||
+    base.startsWith(".env.") ||
+    base.startsWith("id_rsa") ||
+    base === "credentials" ||
+    [".pem", ".key", ".tfstate", ".tfstate.backup", ".tfvars"].some((ext) => base.endsWith(ext))
+  );
+}
 const MAX_FILES = 5000;
 const MAX_FILE_BYTES = 256 * 1024;
 
@@ -43,7 +52,7 @@ export class RepoReader {
     const real = await realpath(abs).catch(() => abs);
     if (real !== this.root && !real.startsWith(this.root + sep))
       throw new RepoAccessError("path escapes the repository via symlink");
-    if (SECRET_FILE.test(relative(this.root, real).split(sep).join("/")))
+    if (isSecretFile(relative(this.root, real).split(sep).join("/")))
       throw new RepoAccessError("secret-bearing files are not readable");
     return real;
   }
@@ -60,7 +69,7 @@ export class RepoReader {
           if (!SKIP_DIRS.has(e.name)) await walk(p);
         } else {
           const rel = relative(this.root, p).split(sep).join("/");
-          if (!SECRET_FILE.test(rel)) files.push(rel);
+          if (!isSecretFile(rel)) files.push(rel);
         }
       }
     };
