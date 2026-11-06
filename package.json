@@ -28,5 +28,11 @@
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.1.0",
     "zod": "^4.6.7"
+  },
+  "license": "Apache-2.0",
+  "description": "Evidence-backed understanding and approval-gated changes for existing AWS applications",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alejo2075/aws-cloud-agent.git"
   }
 }
