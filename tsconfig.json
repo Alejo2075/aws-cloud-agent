@@ -13,6 +13,12 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["apps/**/*.ts", "packages/**/*.ts", "vitest.config.ts", "eslint.config.js"],
+  "include": [
+    "scripts/**/*.ts",
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ],
   "exclude": ["**/node_modules", "**/dist"]
 }

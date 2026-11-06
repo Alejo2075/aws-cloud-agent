@@ -10,11 +10,22 @@
     "@cloud-agent/agent": "workspace:^",
     "@cloud-agent/changes": "workspace:^",
     "@cloud-agent/connections": "workspace:^",
-    "@cloud-agent/discovery": "workspace:^",
+    "@cloud-agent/contracts": "workspace:^",
     "@cloud-agent/evidence": "workspace:^",
     "@cloud-agent/graph": "workspace:^",
     "@cloud-agent/manifest": "workspace:^",
     "@cloud-agent/tools-aws": "workspace:^",
-    "commander": "^15.0.0"
+    "commander": "^15.0.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "bin": {
+    "cloud-agent": "./src/bin.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx src/bin.ts"
+  },
+  "devDependencies": {
+    "@cloud-agent/discovery": "workspace:^"
   }
 }
