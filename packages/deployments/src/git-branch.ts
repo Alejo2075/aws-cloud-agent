@@ -42,11 +42,16 @@ export function validatePatchPaths(patch: string): string[] {
   let inHeader = false;
   for (const line of lines) {
     if (line.startsWith("diff --git ")) {
-      const m = /^diff --git a\/(\S[^ ]*|\S.*?) b\/(\S.*)$/.exec(line);
-      if (!m) throw new PatchRejectedError(`unsupported diff header: ${line.slice(0, 80)}`);
-      checkPath(m[1]!);
-      checkPath(m[2]!);
-      paths.add(m[1]!).add(m[2]!);
+      // Linear parse (no backtracking regex): `diff --git a/<old> b/<new>`; real paths come from the checks below.
+      const rest = line.slice("diff --git ".length);
+      const sep = rest.indexOf(" b/");
+      if (!rest.startsWith("a/") || sep < 2)
+        throw new PatchRejectedError(`unsupported diff header: ${line.slice(0, 80)}`);
+      const oldPath = rest.slice(2, sep);
+      const newPath = rest.slice(sep + 3);
+      checkPath(oldPath);
+      checkPath(newPath);
+      paths.add(oldPath).add(newPath);
       inHeader = true;
       continue;
     }
@@ -113,6 +118,8 @@ function git(cwd: string, args: string[], input?: string): Promise<string> {
         ? resolve(out.trim())
         : reject(new Error(`git ${args[0]} failed: ${err.trim().slice(0, 500)}`)),
     );
+    // git may exit before reading stdin (e.g. a failing `apply --check`); the exit code reports that, not EPIPE.
+    c.stdin.on("error", () => undefined);
     c.stdin.end(input ?? "");
   });
 }

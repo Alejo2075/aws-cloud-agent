@@ -98,6 +98,15 @@ describe("validatePatchPaths", () => {
       ),
     ).toEqual(["n.ts"]);
   });
+  it("parses headers in linear time even for hostile lines", () => {
+    const t = Date.now();
+    try {
+      validatePatchPaths(`diff --git a/! b/!${" b/!".repeat(50_000)}\n`);
+    } catch {
+      /* accepted or rejected does not matter here; only the running time does */
+    }
+    expect(Date.now() - t).toBeLessThan(500);
+  });
   it("rejects traversal, .git, secrets, odd characters and quoted paths", () => {
     for (const bad of [
       "../x",
