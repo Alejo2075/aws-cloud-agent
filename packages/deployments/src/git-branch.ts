@@ -11,29 +11,93 @@ const BRANCH = /^cloud-agent\/[\w.-]{1,80}$/;
 
 export class PatchRejectedError extends Error {}
 
-/** Every path a unified diff touches; rejects anything that could leave the repo or hit secrets. */
+const ALLOWED_MODES = new Set(["100644", "100755"]);
+
+function checkPath(p: string): void {
+  if (!p || /["\\\0\n\r\t]/.test(p))
+    throw new PatchRejectedError(`unsupported characters in patch path: ${JSON.stringify(p)}`);
+  const segs = p.split("/");
+  if (p.startsWith("/") || segs.some((x) => x === ".." || x === "." || x === "" || x === ".git"))
+    throw new PatchRejectedError(`patch path not allowed: ${p}`);
+  if (isSecretFile(p)) throw new PatchRejectedError(`patch touches a secret-bearing file: ${p}`);
+}
+
+function checkMode(mode: string): void {
+  if (!ALLOWED_MODES.has(mode))
+    throw new PatchRejectedError(
+      `file mode ${mode} is not allowed (symlinks, submodules and special modes are rejected)`,
+    );
+}
+
+/**
+ * Fail-closed parser for the header region of every file in a unified diff. Lines inside hunks always start
+ * with ' ', '+', '-' or '\\', so anything else after `diff --git` is a header and must be a form we understand;
+ * unknown, quoted or odd headers reject the whole patch. Returns every path the patch declares it touches.
+ */
 export function validatePatchPaths(patch: string): string[] {
-  if (/^GIT binary patch/m.test(patch))
-    throw new PatchRejectedError("binary patches are not allowed");
-  if (/^(new|old) file mode 120000/m.test(patch) || /^new file mode 160000/m.test(patch))
-    throw new PatchRejectedError("symlink and submodule changes are not allowed");
+  const lines = patch.split("\n");
+  if (!lines[0]?.startsWith("diff --git "))
+    throw new PatchRejectedError("patch must start with a `diff --git` header");
   const paths = new Set<string>();
-  for (const line of patch.split("\n")) {
-    const m =
-      /^(?:diff --git a\/(.+) b\/(.+)|--- a\/(.+)|\+\+\+ b\/(.+)|rename (?:from|to) (.+))$/.exec(
-        line,
-      );
-    if (!m) continue;
-    for (const p of m.slice(1).filter((x): x is string => !!x)) paths.add(p);
+  let inHeader = false;
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      const m = /^diff --git a\/(\S[^ ]*|\S.*?) b\/(\S.*)$/.exec(line);
+      if (!m) throw new PatchRejectedError(`unsupported diff header: ${line.slice(0, 80)}`);
+      checkPath(m[1]!);
+      checkPath(m[2]!);
+      paths.add(m[1]!).add(m[2]!);
+      inHeader = true;
+      continue;
+    }
+    if (!inHeader) continue;
+    if (line.startsWith("@@")) {
+      inHeader = false;
+      continue;
+    }
+    if (line === "") continue;
+    let m: RegExpExecArray | null;
+    if (
+      (m = /^(?:old|new) mode (\d{6})$/.exec(line)) ||
+      (m = /^(?:new|deleted) file mode (\d{6})$/.exec(line))
+    )
+      checkMode(m[1]!);
+    else if ((m = /^index [0-9a-f]+\.\.[0-9a-f]+(?: (\d{6}))?$/.exec(line))) {
+      if (m[1]) checkMode(m[1]);
+    } else if (
+      /^similarity index \d{1,3}%$/.test(line) ||
+      /^dissimilarity index \d{1,3}%$/.test(line)
+    )
+      continue;
+    else if ((m = /^(?:rename|copy) (?:from|to) (.+)$/.exec(line))) {
+      checkPath(m[1]!);
+      paths.add(m[1]!);
+    } else if ((m = /^(?:--- a\/(.+)|\+\+\+ b\/(.+))$/.exec(line))) {
+      const p = (m[1] ?? m[2])!;
+      checkPath(p);
+      paths.add(p);
+    } else if (line === "--- /dev/null" || line === "+++ /dev/null") continue;
+    else throw new PatchRejectedError(`unsupported patch header line: ${line.slice(0, 80)}`);
   }
   if (!paths.size) throw new PatchRejectedError("patch touches no files");
-  for (const p of paths) {
-    const segs = p.split("/");
-    if (p.startsWith("/") || segs.includes("..") || segs[0] === ".git" || segs.includes(".git"))
-      throw new PatchRejectedError(`patch path not allowed: ${p}`);
-    if (isSecretFile(p)) throw new PatchRejectedError(`patch touches a secret-bearing file: ${p}`);
-  }
   return [...paths];
+}
+
+/** Re-checks what git actually staged: the real changed set must be inside the declared set and pass every rule. */
+export function verifyStagedChanges(raw: string, declared: Set<string>): string[] {
+  const tokens = raw.split("\0").filter(Boolean);
+  const changed: string[] = [];
+  for (let i = 0; i + 1 < tokens.length; i += 2) {
+    const meta = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ ([A-Z])\d*$/.exec(tokens[i]!);
+    if (!meta) throw new PatchRejectedError(`unexpected staged entry: ${tokens[i]!.slice(0, 60)}`);
+    const path = tokens[i + 1]!;
+    checkPath(path);
+    if (meta[3] !== "D") checkMode(meta[2]!);
+    if (!declared.has(path))
+      throw new PatchRejectedError(`staged change to undeclared path: ${path}`);
+    changed.push(path);
+  }
+  return changed;
 }
 
 function git(cwd: string, args: string[], input?: string): Promise<string> {
@@ -89,7 +153,7 @@ export class GitBranchDeployer implements Deployer {
           status: "failed",
           detail: `repository HEAD ${head} differs from the plan's source revision ${plan.sourceRevision}`,
         };
-      for (const e of plan.edits) validatePatchPaths(e.patch);
+      const declared = new Set(plan.edits.flatMap((e) => validatePatchPaths(e.patch)));
       if (await git(this.o.repoPath, ["branch", "--list", branch]))
         return {
           status: "failed",
@@ -104,6 +168,10 @@ export class GitBranchDeployer implements Deployer {
         await git(work, ["apply", "--whitespace=nowarn", "-"], e.patch);
       }
       await git(work, ["add", "-A"]);
+      verifyStagedChanges(
+        await git(work, ["diff", "--cached", "--raw", "--no-renames", "-z"]),
+        declared,
+      );
       await git(work, [
         "-c",
         "user.name=Cloud Agent",

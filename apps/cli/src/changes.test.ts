@@ -21,6 +21,7 @@ let repo: string;
 let template: string;
 let deploys: number;
 let actor = "alice";
+const quietObserver = { activeAlarms: async () => [] } as never;
 let port = restaurantPort();
 
 const plannerModel = (
@@ -78,7 +79,7 @@ beforeEach(async () => {
     out: (t) => out.push(t),
     err: (t) => errs.push(t),
     readFile: (p) => readFile(p, "utf8"),
-    session: async () => ({ read: port }),
+    session: async () => ({ read: port, observe: quietObserver }),
     model: () => plannerModel(),
     deployer: async () => deployer,
   } as CliDeps;
@@ -306,5 +307,39 @@ describe("alarm health gate", () => {
     out.length = 0;
     await runCli(["audit"], deps);
     expect(text()).toContain("change.alarms_acknowledged");
+  });
+});
+
+describe("alarm status that cannot be verified fails closed", () => {
+  it("blocks when there is no observability access or the read is denied, unless acknowledged and audited", async () => {
+    deps.session = async () => ({ read: port });
+    const cid = await planAndValidate();
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("alarm status UNVERIFIED: no observability access");
+    expect(deploys).toBe(0);
+
+    errs.length = 0;
+    deps.session = async () => ({
+      read: port,
+      observe: {
+        activeAlarms: async () => {
+          throw new Error("AccessDenied");
+        },
+      } as never,
+    });
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("alarms could not be read");
+
+    expect(
+      await runCli(
+        ["changes", "apply", cid, ...S, "--template", template, "--ignore-alarms"],
+        deps,
+      ),
+    ).toBe(0);
+    expect(deploys).toBe(1);
+    out.length = 0;
+    await runCli(["audit"], deps);
+    expect(text()).toContain("change.alarms_unverified_acknowledged");
   });
 });

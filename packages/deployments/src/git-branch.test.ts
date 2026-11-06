@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { authorizeApply, finalizePlan } from "@cloud-agent/changes";
 import type { Authorization, ChangeRecord } from "@cloud-agent/changes";
-import { GitBranchDeployer, PatchRejectedError, validatePatchPaths } from "./index.js";
+import {
+  GitBranchDeployer,
+  PatchRejectedError,
+  validatePatchPaths,
+  verifyStagedChanges,
+} from "./index.js";
 
 const sh = (cwd: string, ...a: string[]) =>
   execFileSync("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@t", ...a], {
@@ -78,10 +83,22 @@ function auth(p: ReturnType<typeof planWith>): Authorization {
 }
 
 describe("validatePatchPaths", () => {
-  const mk = (p: string) =>
-    `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-a\n+b\n`;
-  it("accepts normal files and rejects traversal, .git, secrets, binaries and symlinks", () => {
+  const mk = (p: string, extra = "") =>
+    `diff --git a/${p} b/${p}\n${extra}--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-a\n+b\n`;
+  it("accepts ordinary patches, including hunks whose content looks like headers", () => {
     expect(validatePatchPaths(mk("lib/stack.ts"))).toEqual(["lib/stack.ts"]);
+    expect(
+      validatePatchPaths(
+        `diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1 +1 @@\n--- a comment\n+++ b comment\n`,
+      ),
+    ).toEqual(["q.sql"]);
+    expect(
+      validatePatchPaths(
+        `diff --git a/n.ts b/n.ts\nnew file mode 100644\nindex 0000000..e69de29\n--- /dev/null\n+++ b/n.ts\n@@ -0,0 +1 @@\n+x\n`,
+      ),
+    ).toEqual(["n.ts"]);
+  });
+  it("rejects traversal, .git, secrets, odd characters and quoted paths", () => {
     for (const bad of [
       "../x",
       "a/../../x",
@@ -89,11 +106,49 @@ describe("validatePatchPaths", () => {
       "sub/.git/config",
       ".env",
       "keys/server.pem",
+      "a//b",
+      "./x",
     ])
       expect(() => validatePatchPaths(mk(bad))).toThrow(PatchRejectedError);
-    expect(() => validatePatchPaths("GIT binary patch\nliteral 1\n")).toThrow("binary");
-    expect(() => validatePatchPaths(`${mk("l")}new file mode 120000\n`)).toThrow("symlink");
-    expect(() => validatePatchPaths("nothing here")).toThrow("no files");
+    expect(() =>
+      validatePatchPaths(
+        'diff --git "a/x y" "b/x y"\n--- "a/x y"\n+++ "b/x y"\n@@ -1 +1 @@\n-a\n+b\n',
+      ),
+    ).toThrow("unsupported");
+    expect(() => validatePatchPaths(mk('we"ird'))).toThrow("unsupported characters");
+  });
+  it("fails closed on unknown headers, odd modes, binaries, preambles and empty patches", () => {
+    expect(() => validatePatchPaths(mk("l", "new file mode 120000\n"))).toThrow("not allowed");
+    expect(() => validatePatchPaths(mk("l", "new mode 160000\n"))).toThrow("not allowed");
+    expect(() => validatePatchPaths(mk("l", "index abc..def 120000\n"))).toThrow("not allowed");
+    expect(() => validatePatchPaths(mk("l", "something unexpected\n"))).toThrow(
+      "unsupported patch header",
+    );
+    expect(() => validatePatchPaths("diff --git a/x b/x\nGIT binary patch\nliteral 1\n")).toThrow(
+      "unsupported patch header",
+    );
+    expect(() => validatePatchPaths(`--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n`)).toThrow(
+      "must start with",
+    );
+    expect(() => validatePatchPaths(`junk\n${mk("x")}`)).toThrow("must start with");
+  });
+});
+
+describe("verifyStagedChanges", () => {
+  const entry = (mode: string, status: string, path: string) =>
+    `:100644 ${mode} aaaaaaa bbbbbbb ${status}\0${path}\0`;
+  it("accepts the declared set and rejects symlinks, secrets and undeclared paths in what git really staged", () => {
+    expect(verifyStagedChanges(entry("100644", "M", "a.ts"), new Set(["a.ts"]))).toEqual(["a.ts"]);
+    expect(verifyStagedChanges(entry("000000", "D", "a.ts"), new Set(["a.ts"]))).toEqual(["a.ts"]);
+    expect(() => verifyStagedChanges(entry("120000", "M", "a.ts"), new Set(["a.ts"]))).toThrow(
+      "not allowed",
+    );
+    expect(() => verifyStagedChanges(entry("100644", "M", ".env"), new Set([".env"]))).toThrow(
+      "secret",
+    );
+    expect(() => verifyStagedChanges(entry("100644", "M", "other.ts"), new Set(["a.ts"]))).toThrow(
+      "undeclared",
+    );
   });
 });
 

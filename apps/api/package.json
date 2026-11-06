@@ -5,5 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cloud-agent/agent": "workspace:^",
+    "@cloud-agent/changes": "workspace:^",
+    "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloud-agent/discovery": "workspace:^"
   }
 }

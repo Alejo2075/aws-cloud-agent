@@ -13,6 +13,7 @@ import { AccessDeniedError } from "./port.js";
 import {
   BoundsError,
   MAX_LOG_EVENTS,
+  METRIC_CATALOG,
   choosePeriod,
   lambdaLogGroup,
   metricSpecFor,
@@ -265,14 +266,14 @@ export class SdkObservabilityPort implements ObservabilityPort {
   }
 
   async activeAlarms(resources: ObservedResource[]): Promise<ActiveAlarm[]> {
-    const byValue = new Map<string, ObservedResource>();
-    for (const r of resources)
-      for (const v of [
-        r.physicalId,
-        r.physicalId.split(/[/:]/).pop() ?? r.physicalId,
-        r.arn.split(/[/:]/).pop() ?? r.arn,
-      ])
-        if (v.length > 2) byValue.set(v, r);
+    // Match on the exact dimension name + value CloudWatch uses for each resource type (from the metric catalog),
+    // or on the full ARN. No fuzzy or truncated tokens.
+    const keys = new Map<string, ObservedResource>();
+    for (const r of resources) {
+      keys.set(`arn=${r.arn}`, r);
+      const spec = METRIC_CATALOG[r.type];
+      if (spec) keys.set(`${spec.dimension}=${spec.value(r)}`, r);
+    }
     const out: ActiveAlarm[] = [];
     let token: string | undefined;
     let pages = 0;
@@ -281,17 +282,26 @@ export class SdkObservabilityPort implements ObservabilityPort {
         const r = await this.cw.send(
           new DescribeAlarmsCommand({
             StateValue: "ALARM",
-            AlarmTypes: ["MetricAlarm"],
+            AlarmTypes: ["MetricAlarm", "CompositeAlarm"],
             MaxRecords: 100,
             ...(token && { NextToken: token }),
           }),
         );
+        for (const a of r.CompositeAlarms ?? []) {
+          // A composite alarm cannot be tied to a resource from its rule, so any firing one is conservatively blocking.
+          out.push({
+            name: a.AlarmName ?? "unknown",
+            reason: `composite alarm in ALARM state (cannot be mapped to a resource): ${(a.StateReason ?? "").slice(0, 200)}`,
+            resourceId: "unknown",
+            ...(a.StateUpdatedTimestamp && { since: a.StateUpdatedTimestamp.toISOString() }),
+          });
+        }
         for (const a of r.MetricAlarms ?? []) {
           const dims = [
             ...(a.Dimensions ?? []),
             ...(a.Metrics ?? []).flatMap((m) => m.MetricStat?.Metric?.Dimensions ?? []),
           ];
-          const hit = dims.map((d) => byValue.get(d.Value ?? "")).find(Boolean);
+          const hit = dims.map((d) => keys.get(`${d.Name}=${d.Value}`)).find(Boolean);
           if (hit)
             out.push({
               name: a.AlarmName ?? "unknown",
@@ -303,6 +313,13 @@ export class SdkObservabilityPort implements ObservabilityPort {
         token = r.NextToken;
       } while (token && ++pages < 5);
     });
+    // Fail closed: if the listing was cut off we cannot say the system is quiet.
+    if (token)
+      out.push({
+        name: "(listing incomplete)",
+        reason: "more than 500 alarms are firing; could not evaluate all of them",
+        resourceId: "unknown",
+      });
     return out;
   }
 }

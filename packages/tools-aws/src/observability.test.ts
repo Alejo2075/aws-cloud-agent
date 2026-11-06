@@ -197,17 +197,20 @@ describe("SdkObservabilityPort", () => {
 });
 
 describe("activeAlarms", () => {
-  it("returns only firing alarms that reference in-scope resources", async () => {
+  const dims = (name: string, value: string) => [{ Name: name, Value: value }];
+  it("matches exact dimension name and value only, including metric-math alarms", async () => {
     const { DescribeAlarmsCommand } = await import("@aws-sdk/client-cloudwatch");
     cw.on(DescribeAlarmsCommand).resolves({
       MetricAlarms: [
         {
           AlarmName: "checkout-errors",
           StateReason: "Threshold crossed",
-          Dimensions: [{ Name: "FunctionName", Value: "checkout" }],
+          Dimensions: dims("FunctionName", "checkout"),
           StateUpdatedTimestamp: new Date("2026-11-06T10:00:00Z"),
         },
-        { AlarmName: "other-team", Dimensions: [{ Name: "FunctionName", Value: "someone-elses" }] },
+        { AlarmName: "other-team", Dimensions: dims("FunctionName", "someone-elses") },
+        { AlarmName: "wrong-dimension", Dimensions: dims("TableName", "checkout") },
+        { AlarmName: "by-arn", Dimensions: dims("arn", fn.arn) },
         {
           AlarmName: "metric-math",
           Metrics: [
@@ -217,7 +220,7 @@ describe("activeAlarms", () => {
                 Metric: {
                   Namespace: "AWS/Lambda",
                   MetricName: "Errors",
-                  Dimensions: [{ Name: "FunctionName", Value: "checkout" }],
+                  Dimensions: dims("FunctionName", "checkout"),
                 },
                 Period: 60,
                 Stat: "Sum",
@@ -228,7 +231,24 @@ describe("activeAlarms", () => {
       ],
     });
     const a = await port.activeAlarms([fn]);
-    expect(a.map((x) => x.name)).toEqual(["checkout-errors", "metric-math"]);
+    expect(a.map((x) => x.name)).toEqual(["checkout-errors", "by-arn", "metric-math"]);
     expect(a[0]).toMatchObject({ resourceId: "f", since: "2026-11-06T10:00:00.000Z" });
+  });
+  it("treats firing composite alarms as blocking because they cannot be mapped to a resource", async () => {
+    const { DescribeAlarmsCommand } = await import("@aws-sdk/client-cloudwatch");
+    cw.on(DescribeAlarmsCommand).resolves({
+      MetricAlarms: [],
+      CompositeAlarms: [
+        { AlarmName: "site-down", AlarmRule: "ALARM(a)", StateReason: "child alarm fired" },
+      ],
+    });
+    const a = await port.activeAlarms([fn]);
+    expect(a).toEqual([expect.objectContaining({ name: "site-down", resourceId: "unknown" })]);
+  });
+  it("fails closed when the alarm listing is cut off", async () => {
+    const { DescribeAlarmsCommand } = await import("@aws-sdk/client-cloudwatch");
+    cw.on(DescribeAlarmsCommand).resolves({ MetricAlarms: [], NextToken: "more" });
+    const a = await port.activeAlarms([fn]);
+    expect(a.at(-1)).toMatchObject({ name: "(listing incomplete)" });
   });
 });

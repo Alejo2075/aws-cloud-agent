@@ -11,7 +11,7 @@ import { fingerprintGraph } from "@cloud-agent/graph";
 import { isStackHealthy, physicalIdFromArn } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { GitBranchDeployer } from "@cloud-agent/deployments";
-import { LocalWorkerValidator, terraformChecks } from "@cloud-agent/validation";
+import { LocalWorkerValidator } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
 import type { ProfileStore } from "./profiles.js";
@@ -221,7 +221,7 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
         id,
         new LocalWorkerValidator({
           repoPath: p.repository.path,
-          allowed: [...allowed, ...(o.terraform ? terraformChecks() : [])],
+          allowed,
         }),
         deps.actor,
       );
@@ -311,33 +311,44 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
                 ]
               : [],
           );
-          const alarms = session.observe ? await session.observe.activeAlarms(watched) : [];
-          const alarmsOk = alarms.length === 0 || !!o.ignoreAlarms;
-          if (alarms.length && o.ignoreAlarms) {
+          // Alarm status is part of the health gate and fails closed: if it cannot be read, it is "unverified".
+          let alarms: Array<{ name: string }> = [];
+          let unverified: string | undefined;
+          if (!session.observe) unverified = "no observability access is configured";
+          else {
+            try {
+              alarms = await session.observe.activeAlarms(watched);
+            } catch (e) {
+              unverified = `alarms could not be read (${(e as Error).message})`;
+            }
+          }
+          const acknowledged = !!o.ignoreAlarms && (alarms.length > 0 || !!unverified);
+          if (acknowledged) {
             await c.audit.append(
               {
                 actor: deps.actor,
-                action: "change.alarms_acknowledged",
+                action: unverified
+                  ? "change.alarms_unverified_acknowledged"
+                  : "change.alarms_acknowledged",
                 systemId: p.systemId,
                 environment: p.environment,
                 planHash: plan.planHash,
                 outcome: "ok",
-                detail: { alarms: alarms.map((a) => a.name) },
+                detail: { alarms: alarms.map((a) => a.name), unverified },
               },
               deps.now(),
             );
           }
+          const alarmsOk = (alarms.length === 0 && !unverified) || acknowledged;
           const parts = [
             status === undefined
               ? "source-only change (no stack deployment)"
               : `stack ${stack} is ${status}`,
           ];
           if (alarms.length)
-            parts.push(
-              `${alarms.length} alarm(s) firing: ${alarms.map((a) => a.name).join(", ")}${o.ignoreAlarms ? " (acknowledged by operator)" : ""}`,
-            );
-          else if (!session.observe)
-            parts.push("alarm status not checked (no observability access)");
+            parts.push(`${alarms.length} alarm(s) firing: ${alarms.map((a) => a.name).join(", ")}`);
+          if (unverified) parts.push(`alarm status UNVERIFIED: ${unverified}`);
+          if (acknowledged) parts.push("acknowledged by operator (--ignore-alarms)");
           return {
             sourceRevision: `${r.revision ?? "unknown"}${r.dirty ? "+dirty" : ""}`,
             driftDetected:

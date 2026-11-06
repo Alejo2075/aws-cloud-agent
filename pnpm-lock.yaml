@@ -42,7 +42,30 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
-  apps/api: {}
+  apps/api:
+    dependencies:
+      '@cloud-agent/agent':
+        specifier: workspace:^
+        version: link:../../packages/agent
+      '@cloud-agent/changes':
+        specifier: workspace:^
+        version: link:../../packages/changes
+      '@cloud-agent/contracts':
+        specifier: workspace:^
+        version: link:../../packages/contracts
+      '@cloud-agent/evidence':
+        specifier: workspace:^
+        version: link:../../packages/evidence
+      '@cloud-agent/graph':
+        specifier: workspace:^
+        version: link:../../packages/graph
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@cloud-agent/discovery':
+        specifier: workspace:^
+        version: link:../../packages/discovery
 
   apps/cli:
     dependencies:
