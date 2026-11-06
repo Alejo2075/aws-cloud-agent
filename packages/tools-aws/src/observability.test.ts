@@ -195,3 +195,40 @@ describe("SdkObservabilityPort", () => {
     expect(r.caveats.join()).toContain("untagged");
   });
 });
+
+describe("activeAlarms", () => {
+  it("returns only firing alarms that reference in-scope resources", async () => {
+    const { DescribeAlarmsCommand } = await import("@aws-sdk/client-cloudwatch");
+    cw.on(DescribeAlarmsCommand).resolves({
+      MetricAlarms: [
+        {
+          AlarmName: "checkout-errors",
+          StateReason: "Threshold crossed",
+          Dimensions: [{ Name: "FunctionName", Value: "checkout" }],
+          StateUpdatedTimestamp: new Date("2026-11-06T10:00:00Z"),
+        },
+        { AlarmName: "other-team", Dimensions: [{ Name: "FunctionName", Value: "someone-elses" }] },
+        {
+          AlarmName: "metric-math",
+          Metrics: [
+            {
+              Id: "m",
+              MetricStat: {
+                Metric: {
+                  Namespace: "AWS/Lambda",
+                  MetricName: "Errors",
+                  Dimensions: [{ Name: "FunctionName", Value: "checkout" }],
+                },
+                Period: 60,
+                Stat: "Sum",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const a = await port.activeAlarms([fn]);
+    expect(a.map((x) => x.name)).toEqual(["checkout-errors", "metric-math"]);
+    expect(a[0]).toMatchObject({ resourceId: "f", since: "2026-11-06T10:00:00.000Z" });
+  });
+});

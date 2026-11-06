@@ -281,3 +281,30 @@ describe("change lifecycle through the CLI", () => {
     expect(errs.join()).toContain("no template or patches");
   });
 });
+
+describe("alarm health gate", () => {
+  it("blocks apply while alarms fire on in-scope resources and allows an audited acknowledgement", async () => {
+    deps.session = async () => ({
+      read: port,
+      observe: {
+        activeAlarms: async () => [{ name: "checkout-errors", reason: "x", resourceId: "fn" }],
+      } as never,
+    });
+    const cid = await planAndValidate();
+    await runCli(["changes", "approve", cid, ...S], deps);
+    expect(await runCli(["changes", "apply", cid, ...S, "--template", template], deps)).toBe(1);
+    expect(errs.join()).toContain("1 alarm(s) firing: checkout-errors");
+    expect(deploys).toBe(0);
+    errs.length = 0;
+    expect(
+      await runCli(
+        ["changes", "apply", cid, ...S, "--template", template, "--ignore-alarms"],
+        deps,
+      ),
+    ).toBe(0);
+    expect(deploys).toBe(1);
+    out.length = 0;
+    await runCli(["audit"], deps);
+    expect(text()).toContain("change.alarms_acknowledged");
+  });
+});

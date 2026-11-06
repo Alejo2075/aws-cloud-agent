@@ -73,6 +73,15 @@ export interface ObservabilityPort {
   deploymentHistory(stacks: string[], range: TimeRange): Promise<DeploymentRecord[]>;
   resourceChanges(resourceName: string, range: TimeRange): Promise<DeploymentRecord[]>;
   costByTag(req: CostQuery): Promise<CostResult>;
+  /** Alarms currently in ALARM state whose metric dimensions reference one of the given resources. */
+  activeAlarms(resources: ObservedResource[]): Promise<ActiveAlarm[]>;
+}
+
+export interface ActiveAlarm {
+  name: string;
+  reason: string;
+  resourceId: string;
+  since?: string;
 }
 
 export const MAX_RANGE_MS = 7 * 24 * 3600 * 1000;

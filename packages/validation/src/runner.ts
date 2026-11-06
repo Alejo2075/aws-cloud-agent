@@ -93,3 +93,23 @@ export class LocalWorkerValidator implements Validator {
     }
   }
 }
+
+/**
+ * Offline Terraform checks (no backend, no provider credentials, never `plan`/`apply`, so nothing
+ * can reach real state or AWS). Changes to Terraform code travel through the branch/PR path.
+ */
+export function terraformChecks(): AllowedCommand[] {
+  return [
+    {
+      name: "terraform init (no backend)",
+      file: "terraform",
+      args: ["init", "-backend=false", "-input=false", "-no-color"],
+    },
+    { name: "terraform validate", file: "terraform", args: ["validate", "-no-color"] },
+    {
+      name: "terraform fmt -check",
+      file: "terraform",
+      args: ["fmt", "-check", "-recursive", "-no-color"],
+    },
+  ];
+}

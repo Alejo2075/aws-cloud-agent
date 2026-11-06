@@ -124,3 +124,13 @@ describe("CodeBuildValidator (mocked)", () => {
     expect(cb.calls()).toHaveLength(0);
   });
 });
+
+describe("terraformChecks", () => {
+  it("never plans or applies, so it cannot reach state or AWS", async () => {
+    const { terraformChecks } = await import("./index.js");
+    const all = terraformChecks().flatMap((c) => c.args);
+    expect(all).not.toContain("plan");
+    expect(all).not.toContain("apply");
+    expect(all).toContain("-backend=false");
+  });
+});

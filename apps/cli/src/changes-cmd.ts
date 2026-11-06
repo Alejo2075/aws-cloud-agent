@@ -8,10 +8,10 @@ import type { ConnectionProfile, SystemGraph } from "@cloud-agent/contracts";
 import { FileEvidenceStore } from "@cloud-agent/evidence";
 import type { AuditLog } from "@cloud-agent/evidence";
 import { fingerprintGraph } from "@cloud-agent/graph";
-import { isStackHealthy } from "@cloud-agent/tools-aws";
+import { isStackHealthy, physicalIdFromArn } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { GitBranchDeployer } from "@cloud-agent/deployments";
-import { LocalWorkerValidator } from "@cloud-agent/validation";
+import { LocalWorkerValidator, terraformChecks } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
 import type { ProfileStore } from "./profiles.js";
@@ -219,7 +219,10 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
       });
       const rec = await svc.validate(
         id,
-        new LocalWorkerValidator({ repoPath: p.repository.path, allowed }),
+        new LocalWorkerValidator({
+          repoPath: p.repository.path,
+          allowed: [...allowed, ...(o.terraform ? terraformChecks() : [])],
+        }),
         deps.actor,
       );
       deps.out(`${rec.validation?.report ?? ""}\n\nState: ${rec.state}`);
@@ -255,6 +258,10 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
       "--pr-base <branch>",
       "open a pull request against this branch (requires --push and gh)",
     )
+    .option(
+      "--ignore-alarms",
+      "proceed although alarms are firing on in-scope resources (recorded in the audit trail)",
+    )
     .action(async (id, o) => {
       const { p, svc } = await locate(id, o.system, o.env);
       const rec = await svc.get(id);
@@ -289,18 +296,54 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
         async check(plan: ChangeRecord["plan"]) {
           const r = await repo.revision();
           const fresh = await c.refresh(p);
-          const status = stack
-            ? await (await deps.session(p)).read.getStackStatus(stack)
-            : undefined;
+          const session = await deps.session(p);
+          const status = stack ? await session.read.getStackStatus(stack) : undefined;
+          const graph = await c.loadGraph(p);
+          const watched = (graph?.resources ?? []).flatMap((x) =>
+            x.arn
+              ? [
+                  {
+                    id: x.id,
+                    arn: x.arn,
+                    type: x.type,
+                    physicalId: physicalIdFromArn(x.arn, fresh),
+                  },
+                ]
+              : [],
+          );
+          const alarms = session.observe ? await session.observe.activeAlarms(watched) : [];
+          const alarmsOk = alarms.length === 0 || !!o.ignoreAlarms;
+          if (alarms.length && o.ignoreAlarms) {
+            await c.audit.append(
+              {
+                actor: deps.actor,
+                action: "change.alarms_acknowledged",
+                systemId: p.systemId,
+                environment: p.environment,
+                planHash: plan.planHash,
+                outcome: "ok",
+                detail: { alarms: alarms.map((a) => a.name) },
+              },
+              deps.now(),
+            );
+          }
+          const parts = [
+            status === undefined
+              ? "source-only change (no stack deployment)"
+              : `stack ${stack} is ${status}`,
+          ];
+          if (alarms.length)
+            parts.push(
+              `${alarms.length} alarm(s) firing: ${alarms.map((a) => a.name).join(", ")}${o.ignoreAlarms ? " (acknowledged by operator)" : ""}`,
+            );
+          else if (!session.observe)
+            parts.push("alarm status not checked (no observability access)");
           return {
             sourceRevision: `${r.revision ?? "unknown"}${r.dirty ? "+dirty" : ""}`,
             driftDetected:
               !!plan.graphFingerprint && plan.graphFingerprint !== fingerprintGraph(fresh),
-            healthy: status === undefined ? true : isStackHealthy(status),
-            healthDetail:
-              status === undefined
-                ? "source-only change (no stack deployment)"
-                : `stack ${stack} is ${status}`,
+            healthy: (status === undefined ? true : isStackHealthy(status)) && alarmsOk,
+            healthDetail: parts.join("; "),
           };
         },
       };

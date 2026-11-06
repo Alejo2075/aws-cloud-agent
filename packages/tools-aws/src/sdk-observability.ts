@@ -1,5 +1,9 @@
 import { CloudTrailClient, LookupEventsCommand } from "@aws-sdk/client-cloudtrail";
-import { CloudWatchClient, GetMetricDataCommand } from "@aws-sdk/client-cloudwatch";
+import {
+  CloudWatchClient,
+  DescribeAlarmsCommand,
+  GetMetricDataCommand,
+} from "@aws-sdk/client-cloudwatch";
 import { CloudWatchLogsClient, FilterLogEventsCommand } from "@aws-sdk/client-cloudwatch-logs";
 import { CloudFormationClient, DescribeStackEventsCommand } from "@aws-sdk/client-cloudformation";
 import { CostExplorerClient, GetCostAndUsageCommand } from "@aws-sdk/client-cost-explorer";
@@ -14,6 +18,7 @@ import {
   metricSpecFor,
 } from "./observability.js";
 import type {
+  ActiveAlarm,
   CostQuery,
   CostResult,
   DeploymentRecord,
@@ -22,6 +27,7 @@ import type {
   MetricRequest,
   MetricSeries,
   ObservabilityPort,
+  ObservedResource,
   TimeRange,
 } from "./observability.js";
 
@@ -256,5 +262,47 @@ export class SdkObservabilityPort implements ObservabilityPort {
         "Cost Explorer data can lag by up to 24 hours.",
       ],
     };
+  }
+
+  async activeAlarms(resources: ObservedResource[]): Promise<ActiveAlarm[]> {
+    const byValue = new Map<string, ObservedResource>();
+    for (const r of resources)
+      for (const v of [
+        r.physicalId,
+        r.physicalId.split(/[/:]/).pop() ?? r.physicalId,
+        r.arn.split(/[/:]/).pop() ?? r.arn,
+      ])
+        if (v.length > 2) byValue.set(v, r);
+    const out: ActiveAlarm[] = [];
+    let token: string | undefined;
+    let pages = 0;
+    await denied("cloudwatch:DescribeAlarms", async () => {
+      do {
+        const r = await this.cw.send(
+          new DescribeAlarmsCommand({
+            StateValue: "ALARM",
+            AlarmTypes: ["MetricAlarm"],
+            MaxRecords: 100,
+            ...(token && { NextToken: token }),
+          }),
+        );
+        for (const a of r.MetricAlarms ?? []) {
+          const dims = [
+            ...(a.Dimensions ?? []),
+            ...(a.Metrics ?? []).flatMap((m) => m.MetricStat?.Metric?.Dimensions ?? []),
+          ];
+          const hit = dims.map((d) => byValue.get(d.Value ?? "")).find(Boolean);
+          if (hit)
+            out.push({
+              name: a.AlarmName ?? "unknown",
+              reason: (a.StateReason ?? "").slice(0, 300),
+              resourceId: hit.id,
+              ...(a.StateUpdatedTimestamp && { since: a.StateUpdatedTimestamp.toISOString() }),
+            });
+        }
+        token = r.NextToken;
+      } while (token && ++pages < 5);
+    });
+    return out;
   }
 }
