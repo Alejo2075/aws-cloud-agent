@@ -117,7 +117,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         accountId: roleAccount(o.roleArn),
         region: o.region,
         scope: { stacks, resourceArns: o.arn, tags },
-        roles: { "read-only": o.roleArn, ...(o.writeRoleArn && { write: o.writeRoleArn }) },
+        roles: {
+          "read-only": o.roleArn,
+          ...(o.planningRoleArn && { "change-planning": o.planningRoleArn }),
+          ...(o.writeRoleArn && { write: o.writeRoleArn }),
+        },
+        ...(o.eventBus && { eventBusName: o.eventBus }),
         ...(o.repo && { repository: { path: resolve(o.repo) } }),
       });
       await profiles.save(profile);

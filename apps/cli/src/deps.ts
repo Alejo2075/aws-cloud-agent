@@ -3,9 +3,12 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { BedrockModelPort } from "@cloud-agent/agent";
 import type { ModelPort } from "@cloud-agent/agent";
-import type { Deployer } from "@cloud-agent/changes";
+import type { Deployer, EventPublisher, Validator } from "@cloud-agent/changes";
 import type { ConnectionProfile } from "@cloud-agent/contracts";
-import { CfnChangeSetDeployer } from "@cloud-agent/deployments";
+import { CfnChangeSetDeployer, EventBridgePublisher } from "@cloud-agent/deployments";
+import { CodeBuildValidator } from "@cloud-agent/validation";
+import { CodeBuildClient } from "@aws-sdk/client-codebuild";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { TemplateArtifact } from "@cloud-agent/deployments";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import {
@@ -27,6 +30,10 @@ export interface CliDeps {
   /** Assume the profile's read-only role; ports are bound to the identity AWS actually reports. */
   session(profile: ConnectionProfile): Promise<{ read: AwsReadPort; observe?: ObservabilityPort }>;
   model(modelId: string | undefined, region: string): ModelPort;
+  /** Isolated validation in CodeBuild using the connection's change-planning role (optional). */
+  codeBuildValidator?(profile: ConnectionProfile, project: string): Promise<Validator>;
+  /** Lifecycle event publisher for connections that declare an event bus (optional). */
+  events?(profile: ConnectionProfile): Promise<EventPublisher | undefined>;
   /** Builds a deployer bound to the profile's WRITE role. Used only after policy authorizes an apply. */
   deployer(profile: ConnectionProfile, artifact: TemplateArtifact): Promise<Deployer>;
 }
@@ -68,6 +75,27 @@ export function defaultDeps(): CliDeps {
         region: profile.region,
         artifact: async () => artifact,
       });
+    },
+    async codeBuildValidator(profile, project) {
+      const role = profile.roles["change-planning"];
+      if (!role)
+        throw new Error(
+          "no change-planning role is configured for this connection; add one with --planning-role-arn",
+        );
+      const client = new CodeBuildClient({
+        region: profile.region,
+        credentials: assumeRole(role, profile.region, "cloud-agent-plan"),
+      });
+      return new CodeBuildValidator({ client, projectName: project });
+    },
+    async events(profile) {
+      const role = profile.roles["change-planning"] ?? profile.roles.write;
+      if (!profile.eventBusName || !role) return undefined;
+      const client = new EventBridgeClient({
+        region: profile.region,
+        credentials: assumeRole(role, profile.region, "cloud-agent-events"),
+      });
+      return new EventBridgePublisher({ client, eventBusName: profile.eventBusName });
     },
     model(modelId, region) {
       const id = modelId ?? process.env["CLOUD_AGENT_MODEL_ID"];

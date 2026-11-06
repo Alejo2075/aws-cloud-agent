@@ -49,6 +49,12 @@ importers:
       '@aws-sdk/client-cloudformation':
         specifier: ^3.1163.0
         version: 3.1163.0
+      '@aws-sdk/client-codebuild':
+        specifier: ^3.1163.0
+        version: 3.1163.0
+      '@aws-sdk/client-eventbridge':
+        specifier: ^3.1163.0
+        version: 3.1163.0
       '@cloud-agent/agent':
         specifier: workspace:^
         version: link:../../packages/agent
@@ -171,6 +177,9 @@ importers:
       '@cloud-agent/contracts':
         specifier: workspace:^
         version: link:../contracts
+      '@cloud-agent/tools-git':
+        specifier: workspace:^
+        version: link:../tools-git
       zod:
         specifier: ^4.6.7
         version: 4.6.7

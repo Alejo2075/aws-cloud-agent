@@ -10,6 +10,7 @@ import type { AuditLog } from "@cloud-agent/evidence";
 import { fingerprintGraph } from "@cloud-agent/graph";
 import { isStackHealthy } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
+import { GitBranchDeployer } from "@cloud-agent/deployments";
 import { LocalWorkerValidator } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
@@ -78,15 +79,18 @@ export function formatChange(r: ChangeRecord): string {
 
 export function registerChangeCommands(program: Command, c: ChangeCommandContext): void {
   const { deps } = c;
-  const service = async (p: ConnectionProfile) =>
-    new ChangeService({
+  const service = async (p: ConnectionProfile) => {
+    const events = await deps.events?.(p);
+    return new ChangeService({
       store: new FileChangeStore(
         join(deps.home, "changes", p.accountId, p.region, p.systemId, p.environment),
       ),
       audit: c.audit,
       policy: { writeRoleConfigured: !!p.roles.write },
+      ...(events && { events }),
       now: deps.now,
     });
+  };
 
   const locate = async (changeId: string, system: string, env?: string) => {
     const p = await c.profiles.resolve(system, env);
@@ -192,8 +196,22 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
       (v: string, p: string[]) => [...p, v],
       [] as string[],
     )
+    .option(
+      "--codebuild <project>",
+      "validate in an isolated CodeBuild project instead of a local copy",
+    )
     .action(async (id, o) => {
       const { p, svc } = await locate(id, o.system, o.env);
+      if (o.codebuild) {
+        if (!deps.codeBuildValidator)
+          throw new CliError("CodeBuild validation is not available in this environment");
+        const rec = await svc.validate(
+          id,
+          await deps.codeBuildValidator(p, o.codebuild),
+          deps.actor,
+        );
+        return deps.out(`${rec.validation?.report ?? ""}\n\nState: ${rec.state}`);
+      }
       if (!p.repository) throw new CliError("no repository linked");
       const allowed = (o.check as string[]).map((line, i) => {
         const [file, ...args] = line.trim().split(/\s+/);
@@ -231,38 +249,58 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
     });
 
   common(changes.command("apply <changeId>"))
-    .requiredOption("--template <file>", "the exact template that was approved")
+    .option("--template <file>", "the exact template that was approved (plans that deploy a stack)")
+    .option("--push", "push the created branch to the remote (plans that carry patches)")
+    .option(
+      "--pr-base <branch>",
+      "open a pull request against this branch (requires --push and gh)",
+    )
     .action(async (id, o) => {
       const { p, svc } = await locate(id, o.system, o.env);
       const rec = await svc.get(id);
-      const artifact = rec.plan.artifact;
-      if (!artifact)
-        throw new CliError(
-          "this plan has no deployable artifact; apply it through your normal source/CI pipeline",
-        );
-      const body = await deps.readFile(o.template);
-      if (sha256(body) !== artifact.sha256)
-        throw new CliError(
-          "template does not match the sha256 bound to the approved plan; refusing to deploy",
-        );
       if (!p.repository) throw new CliError("no repository linked");
       const repo = await RepoReader.open(p.repository.path);
-      const deployer = await deps.deployer(p, {
-        stackName: artifact.stackName,
-        templateBody: body,
-      });
+      const artifact = rec.plan.artifact;
+      let deployer;
+      let stack: string | undefined;
+      if (artifact) {
+        if (!o.template)
+          throw new CliError("this plan deploys a stack; pass the approved --template");
+        const body = await deps.readFile(o.template);
+        if (sha256(body) !== artifact.sha256)
+          throw new CliError(
+            "template does not match the sha256 bound to the approved plan; refusing to deploy",
+          );
+        stack = artifact.stackName;
+        deployer = await deps.deployer(p, { stackName: artifact.stackName, templateBody: body });
+      } else if (rec.plan.edits.length) {
+        if (o.prBase && !o.push) throw new CliError("--pr-base requires --push");
+        deployer = new GitBranchDeployer({
+          repoPath: p.repository.path,
+          push: !!o.push,
+          ...(o.prBase && { pullRequest: { base: o.prBase } }),
+        });
+      } else {
+        throw new CliError(
+          "this plan has no template or patches to apply; use your normal pipeline",
+        );
+      }
       const preflight = {
         async check(plan: ChangeRecord["plan"]) {
           const r = await repo.revision();
           const fresh = await c.refresh(p);
-          const { read } = await deps.session(p);
-          const status = await read.getStackStatus(artifact.stackName);
+          const status = stack
+            ? await (await deps.session(p)).read.getStackStatus(stack)
+            : undefined;
           return {
             sourceRevision: `${r.revision ?? "unknown"}${r.dirty ? "+dirty" : ""}`,
             driftDetected:
               !!plan.graphFingerprint && plan.graphFingerprint !== fingerprintGraph(fresh),
-            healthy: isStackHealthy(status),
-            healthDetail: `stack ${artifact.stackName} is ${status}`,
+            healthy: status === undefined ? true : isStackHealthy(status),
+            healthDetail:
+              status === undefined
+                ? "source-only change (no stack deployment)"
+                : `stack ${stack} is ${status}`,
           };
         },
       };

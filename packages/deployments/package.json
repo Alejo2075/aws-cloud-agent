@@ -11,6 +11,7 @@
     "@aws-sdk/client-eventbridge": "^3.1163.0",
     "@cloud-agent/changes": "workspace:^",
     "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/tools-git": "workspace:^",
     "zod": "^4.6.7"
   },
   "devDependencies": {
