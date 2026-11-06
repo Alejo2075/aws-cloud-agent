@@ -120,6 +120,9 @@ importers:
       '@cloud-agent/contracts':
         specifier: workspace:^
         version: link:../contracts
+      '@cloud-agent/evidence':
+        specifier: workspace:^
+        version: link:../evidence
       zod:
         specifier: ^4.6.7
         version: 4.6.7
