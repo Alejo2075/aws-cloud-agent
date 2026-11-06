@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { finalizePlan } from "@cloud-agent/changes";
-import { LocalWorkerValidator, scrubbedEnv } from "./index.js";
+import { mockClient } from "aws-sdk-client-mock";
+import {
+  BatchGetBuildsCommand,
+  CodeBuildClient,
+  StartBuildCommand,
+} from "@aws-sdk/client-codebuild";
+import { CodeBuildValidator, LocalWorkerValidator, scrubbedEnv } from "./index.js";
 
 const plan = finalizePlan({
   changeId: "c1",
@@ -67,5 +73,54 @@ describe("LocalWorkerValidator", () => {
       ],
     }).validate(plan);
     expect(r.passed).toBe(true);
+  });
+});
+
+describe("CodeBuildValidator (mocked)", () => {
+  const cb = mockClient(CodeBuildClient);
+  const mk = () =>
+    new CodeBuildValidator({
+      client: new CodeBuildClient({ region: "us-east-1" }),
+      projectName: "p",
+      sleep: async () => undefined,
+      maxPolls: 3,
+    });
+
+  it("pins the build to the plan revision and passes only identifiers", async () => {
+    cb.reset();
+    cb.on(StartBuildCommand).resolves({ build: { id: "b1" } });
+    cb.on(BatchGetBuildsCommand)
+      .resolvesOnce({ builds: [{ id: "b1", buildStatus: "IN_PROGRESS" }] })
+      .resolves({
+        builds: [
+          {
+            id: "b1",
+            buildStatus: "SUCCEEDED",
+            phases: [{ phaseType: "BUILD", phaseStatus: "SUCCEEDED" }],
+          },
+        ],
+      });
+    const r = await mk().validate(plan);
+    expect(r.passed).toBe(true);
+    const input = cb.commandCalls(StartBuildCommand)[0]!.args[0].input;
+    expect(input.sourceVersion).toBe("r");
+    expect(input.environmentVariablesOverride?.map((v) => v.name)).toEqual([
+      "CLOUD_AGENT_CHANGE_ID",
+      "CLOUD_AGENT_PLAN_HASH",
+    ]);
+  });
+  it("fails on a failed build, a timeout, and a dirty-tree plan without starting a build", async () => {
+    cb.reset();
+    cb.on(StartBuildCommand).resolves({ build: { id: "b2" } });
+    cb.on(BatchGetBuildsCommand).resolves({ builds: [{ id: "b2", buildStatus: "FAILED" }] });
+    expect((await mk().validate(plan)).passed).toBe(false);
+    cb.reset();
+    cb.on(StartBuildCommand).resolves({ build: { id: "b3" } });
+    cb.on(BatchGetBuildsCommand).resolves({ builds: [{ id: "b3", buildStatus: "IN_PROGRESS" }] });
+    expect((await mk().validate(plan)).report).toContain("did not finish");
+    cb.reset();
+    const dirty = finalizePlan({ ...plan, sourceRevision: "abc+dirty" });
+    expect((await mk().validate(dirty)).report).toContain("uncommitted");
+    expect(cb.calls()).toHaveLength(0);
   });
 });

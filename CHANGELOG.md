@@ -2,6 +2,19 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [0.2.0] - 2026-11-06 (prerelease)
+
+### Added
+
+- Stack health gate before writes (CloudFormation stack status) and configuration-level drift detection (stable config digests in the graph fingerprint).
+- `CodeBuildValidator`: ephemeral validation pinned to the plan's source revision (mocked tests only).
+- Lifecycle events: `EventPublisher` port and `EventBridgePublisher`; publishing is best-effort and failures are audited, never blocking a change.
+- `ToolRegistry`: extension point for read-only plugin tools; mutating, reserved or duplicate tools are rejected.
+
+### Known limitations
+
+Still not verified against a live AWS account. Not implemented: Terraform adapter, branch/PR adapter, hosted API, CDK stack for Cloud Agent itself. See ROADMAP.
+
 ## [0.1.0] - 2026-11-06 (prerelease)
 
 ### Added

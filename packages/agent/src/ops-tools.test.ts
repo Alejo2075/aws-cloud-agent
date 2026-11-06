@@ -200,3 +200,30 @@ describe("repo tools", () => {
     ).toContain("escapes");
   });
 });
+
+describe("ToolRegistry", () => {
+  it("accepts read-only plugin tools and rejects unsafe or conflicting ones", async () => {
+    const { ToolRegistry, ToolRegistryError, defaultToolRegistry } = await import("./registry.js");
+    const { defineTool } = await import("./tools.js");
+    const { z } = await import("zod");
+    const mk = (name: string, access: string = "read") =>
+      defineTool({
+        name,
+        description: "d",
+        access: access as "read",
+        input: z.object({}),
+        run: async () => ({ data: {}, observations: [] }),
+      });
+    const reg = defaultToolRegistry();
+    reg.register(mk("my_plugin_tool"));
+    expect(reg.list().some((t) => t.name === "my_plugin_tool")).toBe(true);
+    expect(() => reg.register(mk("my_plugin_tool"))).toThrow("already registered");
+    expect(() => reg.register(mk("get_system_overview"))).toThrow(ToolRegistryError);
+    expect(() => reg.register(mk("submit_answer"))).toThrow("reserved");
+    expect(() => reg.register(mk("delete_things", "write"))).toThrow("not read-only");
+    expect(() => reg.register(mk("Bad-Name"))).toThrow("invalid tool name");
+    expect(() => new ToolRegistry().register({ ...mk("no_schema"), input: {} as never })).toThrow(
+      "Zod input schema",
+    );
+  });
+});

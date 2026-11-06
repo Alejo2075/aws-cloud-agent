@@ -30,3 +30,22 @@ export interface Preflight {
     healthDetail?: string;
   }>;
 }
+
+export interface LifecycleEvent {
+  type: "change.state-changed" | "change.approved";
+  changeId: string;
+  systemId: string;
+  environment: string;
+  accountId: string;
+  region: string;
+  planHash: string;
+  riskClass: string;
+  from?: string;
+  to?: string;
+  at: string;
+}
+
+/** Best-effort notifications for integrations (e.g. a chat console). Never carries evidence, code or secrets. */
+export interface EventPublisher {
+  publish(event: LifecycleEvent): Promise<void>;
+}

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.1163.0",
+    "@aws-sdk/client-eventbridge": "^3.1163.0",
     "@cloud-agent/changes": "workspace:^",
     "@cloud-agent/contracts": "workspace:^",
     "zod": "^4.6.7"

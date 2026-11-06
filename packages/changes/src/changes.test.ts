@@ -248,3 +248,35 @@ describe("change lifecycle", () => {
     await expect(s.svc.approve("chg-1", "bob")).rejects.toThrow("only AWAITING_APPROVAL");
   });
 });
+
+describe("lifecycle events", () => {
+  it("emits state changes and never lets a failing publisher break or hide a change", async () => {
+    const seen: string[] = [];
+    const audit = new InMemoryAuditLog();
+    const svc = new ChangeService({
+      store: new InMemoryChangeStore(),
+      audit,
+      policy: { writeRoleConfigured: true },
+      events: {
+        publish: async (e) => {
+          seen.push(`${e.to}`);
+        },
+      },
+    });
+    await svc.submitPlan(draft(), "alice");
+    expect(seen).toEqual(["DISCOVERING", "ANALYZING", "PLANNING", "DIFF_READY"]);
+    const bad = new ChangeService({
+      store: new InMemoryChangeStore(),
+      audit,
+      policy: { writeRoleConfigured: true },
+      events: {
+        publish: async () => {
+          throw new Error("bus down");
+        },
+      },
+    });
+    const rec = await bad.submitPlan(draft({ changeId: "chg-2" }), "alice");
+    expect(rec.state).toBe("DIFF_READY");
+    expect((await audit.read()).some((r) => r.action === "event.publish_failed")).toBe(true);
+  });
+});
