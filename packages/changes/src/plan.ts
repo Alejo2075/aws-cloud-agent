@@ -30,6 +30,12 @@ export const PlanDraft = z.object({
   /** Source revision the diff was built against; approval is void if HEAD moves. */
   sourceRevision: z.string().min(1),
   graphBuiltAt: z.iso.datetime(),
+  /** Fingerprint of the topology the plan was based on; a different live fingerprint means drift. */
+  graphFingerprint: z.string().optional(),
+  /** The exact template that will be deployed; approval is bound to its hash. */
+  artifact: z
+    .object({ stackName: z.string().min(1), sha256: z.string().regex(/^[0-9a-f]{64}$/) })
+    .optional(),
   evidence: z.array(z.string()).default([]),
   affected: z.array(z.object({ resourceId: z.string(), impact: z.string() })).default([]),
   actions: z

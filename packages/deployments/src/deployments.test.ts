@@ -73,14 +73,12 @@ const deployer = () =>
 describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
   it("executes a clean change set and waits for UPDATE_COMPLETE", async () => {
     cfn.on(CreateChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeChangeSetCommand)
-      .resolves({
-        Status: "CREATE_COMPLETE",
-        Changes: [
-          { ResourceChange: { Action: "Modify", Replacement: "False", LogicalResourceId: "Fn" } },
-        ],
-      });
+    cfn.on(DescribeChangeSetCommand).resolves({
+      Status: "CREATE_COMPLETE",
+      Changes: [
+        { ResourceChange: { Action: "Modify", Replacement: "False", LogicalResourceId: "Fn" } },
+      ],
+    });
     cfn.on(ExecuteChangeSetCommand).resolves({});
     cfn
       .on(DescribeStacksCommand)
@@ -97,21 +95,19 @@ describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
 
   it("refuses undeclared removals/replacements without executing", async () => {
     cfn.on(CreateChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeChangeSetCommand)
-      .resolves({
-        Status: "CREATE_COMPLETE",
-        Changes: [
-          {
-            ResourceChange: {
-              Action: "Modify",
-              Replacement: "True",
-              LogicalResourceId: "Table",
-              ResourceType: "AWS::DynamoDB::Table",
-            },
+    cfn.on(DescribeChangeSetCommand).resolves({
+      Status: "CREATE_COMPLETE",
+      Changes: [
+        {
+          ResourceChange: {
+            Action: "Modify",
+            Replacement: "True",
+            LogicalResourceId: "Table",
+            ResourceType: "AWS::DynamoDB::Table",
           },
-        ],
-      });
+        },
+      ],
+    });
     cfn.on(DeleteChangeSetCommand).resolves({});
     const r = await deployer().apply(plan(), auth());
     expect(r.status).toBe("failed");
@@ -123,42 +119,34 @@ describe("CfnChangeSetDeployer (mocked CloudFormation)", () => {
   it("allows removals only when the plan declared a destructive action", async () => {
     const p = plan("delete-resource");
     cfn.on(CreateChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeChangeSetCommand)
-      .resolves({
-        Status: "CREATE_COMPLETE",
-        Changes: [{ ResourceChange: { Action: "Remove", LogicalResourceId: "Old" } }],
-      });
+    cfn.on(DescribeChangeSetCommand).resolves({
+      Status: "CREATE_COMPLETE",
+      Changes: [{ ResourceChange: { Action: "Remove", LogicalResourceId: "Old" } }],
+    });
     cfn.on(ExecuteChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeStacksCommand)
-      .resolves({
-        Stacks: [{ StackName: "app", CreationTime: new Date(), StackStatus: "UPDATE_COMPLETE" }],
-      });
+    cfn.on(DescribeStacksCommand).resolves({
+      Stacks: [{ StackName: "app", CreationTime: new Date(), StackStatus: "UPDATE_COMPLETE" }],
+    });
     expect((await deployer().apply(p, auth(p))).status).toBe("succeeded");
   });
 
   it("treats an empty change set as success and a rollback as failure with a data warning", async () => {
     cfn.on(CreateChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeChangeSetCommand)
-      .resolves({
-        Status: "FAILED",
-        StatusReason: "The submitted information didn't contain changes.",
-      });
+    cfn.on(DescribeChangeSetCommand).resolves({
+      Status: "FAILED",
+      StatusReason: "The submitted information didn't contain changes.",
+    });
     cfn.on(DeleteChangeSetCommand).resolves({});
     expect((await deployer().apply(plan(), auth())).detail).toContain("no changes");
     cfn.reset();
     cfn.on(CreateChangeSetCommand).resolves({});
     cfn.on(DescribeChangeSetCommand).resolves({ Status: "CREATE_COMPLETE", Changes: [] });
     cfn.on(ExecuteChangeSetCommand).resolves({});
-    cfn
-      .on(DescribeStacksCommand)
-      .resolves({
-        Stacks: [
-          { StackName: "app", CreationTime: new Date(), StackStatus: "UPDATE_ROLLBACK_COMPLETE" },
-        ],
-      });
+    cfn.on(DescribeStacksCommand).resolves({
+      Stacks: [
+        { StackName: "app", CreationTime: new Date(), StackStatus: "UPDATE_ROLLBACK_COMPLETE" },
+      ],
+    });
     const r = await deployer().apply(plan(), auth());
     expect(r.status).toBe("failed");
     expect(r.detail).toContain("does not restore data");

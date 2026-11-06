@@ -7,15 +7,18 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.1163.0",
     "@cloud-agent/agent": "workspace:^",
     "@cloud-agent/changes": "workspace:^",
     "@cloud-agent/connections": "workspace:^",
     "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/deployments": "workspace:^",
     "@cloud-agent/evidence": "workspace:^",
     "@cloud-agent/graph": "workspace:^",
     "@cloud-agent/manifest": "workspace:^",
     "@cloud-agent/tools-aws": "workspace:^",
     "@cloud-agent/tools-git": "workspace:^",
+    "@cloud-agent/validation": "workspace:^",
     "commander": "^15.0.0",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"

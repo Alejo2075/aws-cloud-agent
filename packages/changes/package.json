@@ -10,6 +10,7 @@
     "@cloud-agent/connections": "workspace:^",
     "@cloud-agent/contracts": "workspace:^",
     "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^",
     "zod": "^4.6.7"
   }
 }

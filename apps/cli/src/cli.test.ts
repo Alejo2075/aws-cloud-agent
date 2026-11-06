@@ -48,6 +48,9 @@ beforeEach(async () => {
     readFile: async () => "",
     session: async () => ({ read: restaurantPort() }),
     model: () => model,
+    deployer: async () => {
+      throw new Error("no deployer in tests");
+    },
   };
 });
 
@@ -167,7 +170,7 @@ describe("cloud-agent CLI", () => {
     expect(errs.join()).toContain("credentials resolve to 999999999999");
   });
 
-  it("does not expose any mutation command yet", async () => {
+  it("has no top-level apply or deploy shortcut", async () => {
     for (const c of ["plan", "changes", "apply", "deploy"])
       expect(await runCli([c], deps)).not.toBe(0);
   });

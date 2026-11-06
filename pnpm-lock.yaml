@@ -43,6 +43,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@aws-sdk/client-cloudformation':
+        specifier: ^3.1163.0
+        version: 3.1163.0
       '@cloud-agent/agent':
         specifier: workspace:^
         version: link:../../packages/agent
@@ -55,6 +58,9 @@ importers:
       '@cloud-agent/contracts':
         specifier: workspace:^
         version: link:../../packages/contracts
+      '@cloud-agent/deployments':
+        specifier: workspace:^
+        version: link:../../packages/deployments
       '@cloud-agent/evidence':
         specifier: workspace:^
         version: link:../../packages/evidence
@@ -70,6 +76,9 @@ importers:
       '@cloud-agent/tools-git':
         specifier: workspace:^
         version: link:../../packages/tools-git
+      '@cloud-agent/validation':
+        specifier: workspace:^
+        version: link:../../packages/validation
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -123,6 +132,9 @@ importers:
       '@cloud-agent/evidence':
         specifier: workspace:^
         version: link:../evidence
+      '@cloud-agent/graph':
+        specifier: workspace:^
+        version: link:../graph
       zod:
         specifier: ^4.6.7
         version: 4.6.7

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { GraphEdge, GraphResource, SystemGraph } from "@cloud-agent/contracts";
 
 export function findResource(
@@ -50,4 +51,13 @@ export function summarize(graph: SystemGraph) {
     byType,
     gaps: graph.gaps,
   };
+}
+
+/** Topology fingerprint (resource ids, types, edges). Configuration-level drift is not covered. */
+export function fingerprintGraph(graph: SystemGraph): string {
+  const rs = graph.resources.map((r) => `${r.id}|${r.type}`).sort();
+  const es = graph.edges.map((e) => `${e.from}|${e.kind}|${e.to}`).sort();
+  return createHash("sha256")
+    .update(JSON.stringify([rs, es]))
+    .digest("hex");
 }

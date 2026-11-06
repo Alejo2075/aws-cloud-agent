@@ -3,7 +3,11 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import { BedrockModelPort } from "@cloud-agent/agent";
 import type { ModelPort } from "@cloud-agent/agent";
+import type { Deployer } from "@cloud-agent/changes";
 import type { ConnectionProfile } from "@cloud-agent/contracts";
+import { CfnChangeSetDeployer } from "@cloud-agent/deployments";
+import type { TemplateArtifact } from "@cloud-agent/deployments";
+import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import {
   SdkAwsReadPort,
   SdkObservabilityPort,
@@ -23,6 +27,8 @@ export interface CliDeps {
   /** Assume the profile's read-only role; ports are bound to the identity AWS actually reports. */
   session(profile: ConnectionProfile): Promise<{ read: AwsReadPort; observe?: ObservabilityPort }>;
   model(modelId: string | undefined, region: string): ModelPort;
+  /** Builds a deployer bound to the profile's WRITE role. Used only after policy authorizes an apply. */
+  deployer(profile: ConnectionProfile, artifact: TemplateArtifact): Promise<Deployer>;
 }
 
 export function defaultDeps(): CliDeps {
@@ -47,6 +53,21 @@ export function defaultDeps(): CliDeps {
         ),
         observe: new SdkObservabilityPort(profile.region, credentials),
       };
+    },
+    async deployer(profile, artifact) {
+      const role = profile.roles.write;
+      if (!role)
+        throw new Error(
+          "no write role is configured for this connection; add one with --write-role-arn",
+        );
+      const credentials = assumeRole(role, profile.region, "cloud-agent-write");
+      const id = await callerIdentity(profile.region, credentials);
+      return new CfnChangeSetDeployer({
+        client: new CloudFormationClient({ region: profile.region, credentials }),
+        accountId: id.accountId,
+        region: profile.region,
+        artifact: async () => artifact,
+      });
     },
     model(modelId, region) {
       const id = modelId ?? process.env["CLOUD_AGENT_MODEL_ID"];

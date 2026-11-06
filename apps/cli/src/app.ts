@@ -10,6 +10,7 @@ import { parseManifest, reconcileManifest, scopeFromManifest } from "@cloud-agen
 import type { CliDeps } from "./deps.js";
 import { formatAnswer, formatGraph } from "./format.js";
 import { CliError, ProfileStore } from "./profiles.js";
+import { registerChangeCommands } from "./changes-cmd.js";
 
 const evidenceDir = (
   home: string,
@@ -71,9 +72,14 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     )
     .requiredOption("--region <region>", "AWS region")
     .requiredOption("--role-arn <arn>", "read-only IAM role Cloud Agent will assume")
+    .option(
+      "--write-role-arn <arn>",
+      "separate role used only to apply approved changes (optional)",
+    )
     .option("--stack <name>", "CloudFormation stack in scope (repeatable)", collect, [] as string[])
     .option("--tag <key=value>", "resource tag in scope (repeatable)", collect, [] as string[])
     .option("--arn <arn>", "explicit resource ARN in scope (repeatable)", collect, [] as string[])
+    .option("--repo <path>", "local checkout of the source repository (opt-in, read-only access)")
     .option(
       "--manifest <file>",
       "CloudSystemManifest to use as a hint (verified against live discovery)",
@@ -111,7 +117,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         accountId: roleAccount(o.roleArn),
         region: o.region,
         scope: { stacks, resourceArns: o.arn, tags },
-        roles: { "read-only": o.roleArn },
+        roles: { "read-only": o.roleArn, ...(o.writeRoleArn && { write: o.writeRoleArn }) },
         ...(o.repo && { repository: { path: resolve(o.repo) } }),
       });
       await profiles.save(profile);
@@ -237,6 +243,15 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       );
       if (!v.ok) throw new CliError("audit chain verification failed");
     });
+
+  registerChangeCommands(program, {
+    deps,
+    profiles,
+    audit,
+    refresh,
+    loadGraph: (p) => graphs.load(p),
+    evidenceDir: (p) => evidenceDir(deps.home, p),
+  });
 
   try {
     await program.parseAsync(argv, { from: "user" });
