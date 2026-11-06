@@ -4,18 +4,20 @@ Source of truth for scope and order: `CLAUDE.md`. Constraint from the owner: **n
 
 Branch: `feat/foundation` (pushed). Last verified: typecheck, lint, format and 75 tests passing locally.
 
-## Done
+## Done (v0.1.0 prerelease candidate)
 
-- **M0**: pnpm workspace, strict TS (6.0.x), ESLint, Prettier, Vitest, CI workflow, contracts (scope, connection, evidence, graph, source), deny-by-default scope evaluation.
-- **M1**: read-only discovery (CloudFormation, tags, ARNs; Lambda, API Gateway v2, DynamoDB, SQS, SNS, S3, EventBridge), System Graph with provenance and inferred edges, evidence store with redaction, hash-chained audit log, manifest import and reconciliation (+ published JSON Schema), Bedrock-backed `ask` with citation validation and budgets, CLI (`connect`, `systems list|inspect|refresh`, `ask`, `audit`).
-- **M2**: bounded metrics, logs (content gated by `sensitiveDataAccess`), deployment history, cost by tag (gated by `costDataAccess`), repository inspection, IaC detection, source mapping; all exposed as read-only agent tools.
+- **M0**: pnpm workspace, strict TS (6.0.x), ESLint, Prettier, Vitest, CI, contracts, deny-by-default scope evaluation.
+- **M1**: scoped read-only discovery, System Graph with provenance, evidence + redaction, hash-chained audit, manifest import/reconcile + JSON Schema, Bedrock `ask` with citation validation, CLI.
+- **M2**: bounded metrics, logs (consent-gated), deployment history, cost by tag (consent-gated), repository/IaC inspection, source mapping.
+- **M3**: change plans with derived risk + hash, state machine, plan-bound approvals, policy gate (branded Authorization), idempotent apply, local validation runner, CloudFormation change-set deployer (fully paginated, per-resource destructive scoping), `plan` / `changes *` CLI. A post-commit security review found three deployer issues; all fixed with tests.
+- **Docs/community**: Apache-2.0 LICENSE, README, architecture, security model (+ example read-only IAM policy), change lifecycle, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, CHANGELOG, ROADMAP, issue/PR templates, dependabot.
 
-## Remaining (in order)
+Last verified locally: typecheck, lint, format, 106 tests passing.
 
-- **M3** (not started): `packages/changes` (state machine, plan hash, approval binding, policy/risk gates, idempotency, stale-plan invalidation), `validation` (isolated worker interface), `deployments` (gated adapters, CloudFormation change set; tests with mocks only), CLI `plan` / `changes *`, audit for every transition.
-- **M4**: Terraform detection/plan adapter, plugin/tool registry API, lifecycle events, `apps/api`, CDK `infra/` (local `cdk synth` only, never deploy).
-- **Release engineering**: LICENSE (Apache-2.0 proposed), README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, docs (architecture, security model, IAM read-only policy), issue/PR templates, dependabot, fix GitHub description/topics (current description is copied from Cloud Engineer), PR to `main`, prerelease `v0.1.0` tag.
+## Not done (see ROADMAP.md)
+
+Live verification in a test account; health gate and config-level drift; branch/PR adapter and patch application; CodeBuild isolated workers; Terraform adapter; plugin loader and lifecycle events; `apps/api`; CDK stack for Cloud Agent itself; more resource types.
 
 ## Not verified
 
-Nothing has run against a real AWS account or real Bedrock. SDK integrations are covered by mocked-client tests only.
+Nothing has run against a real AWS account, Bedrock, CodeBuild or CloudFormation. The owner asked that no live AWS calls be made during development.
