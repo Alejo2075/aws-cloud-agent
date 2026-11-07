@@ -10,12 +10,12 @@
   <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon-Bedrock-F062B0?labelColor=1a1033&style=flat&logo=amazonaws&logoColor=white">
 </p>
 
+Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, answers questions with cited evidence, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are kept separate in code, roles and CLI.
+
 <p align="center">
   <a href="https://aws-agent-hackathon.devpost.com/"><img src="docs/assets/aws-ai-agent-hackathon.png" alt="" height="28" align="absmiddle"></a>
   This project is part of the <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>
 </p>
-
-Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, answers questions with cited evidence, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are kept separate in code, roles and CLI.
 
 ## Features
 
