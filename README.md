@@ -100,12 +100,9 @@ Consent for log contents and cost data is off by default and set per connection 
 
 ## Project status & roadmap
 
-**v0.4.0 prerelease.** Tested against fixtures, mocked AWS clients and local CDK synthesis. **It has not been run against a real AWS account or Bedrock yet**; expect integration bugs.
+**v0.4.1 prerelease.** The test suite uses fixtures and mocked AWS clients; validation in a live AWS account is the next milestone.
 
-- The HTTP API, DynamoDB/S3 stores and CDK stack are code only and have not been deployed.
-- No Terraform apply, no SLO objects, and some resource types are listed without configuration.
-
-Next: verification in an isolated test account (needs the owner's opt-in), hosted deployment wiring, more resource coverage. See the [ROADMAP](ROADMAP.md).
+Also planned: hosted deployment wiring, Terraform apply, SLO objects and more resource coverage. See the [ROADMAP](ROADMAP.md).
 
 ## Contributing
 
