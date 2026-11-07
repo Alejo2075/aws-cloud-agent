@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Alejo2075/aws-cloud-agent/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Alejo2075/aws-cloud-agent/ci.yml?branch=main&label=CI&labelColor=1a1033&style=for-the-badge"></a>
-  <a href="https://github.com/Alejo2075/aws-cloud-agent/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Alejo2075/aws-cloud-agent?include_prereleases&color=8B2CF5&labelColor=1a1033&style=for-the-badge"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-C42DE0?labelColor=1a1033&style=for-the-badge"></a>
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-E835C8?labelColor=1a1033&style=for-the-badge&logo=typescript&logoColor=white">
-  <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon-Bedrock-F062B0?labelColor=1a1033&style=for-the-badge&logo=amazonaws&logoColor=white">
+  <a href="https://github.com/Alejo2075/aws-cloud-agent/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Alejo2075/aws-cloud-agent/ci.yml?branch=main&label=CI&labelColor=1a1033&style=flat"></a>
+  <a href="https://github.com/Alejo2075/aws-cloud-agent/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Alejo2075/aws-cloud-agent?include_prereleases&color=8B2CF5&labelColor=1a1033&style=flat"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-C42DE0?labelColor=1a1033&style=flat"></a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-E835C8?labelColor=1a1033&style=flat&logo=typescript&logoColor=white">
+  <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon-Bedrock-F062B0?labelColor=1a1033&style=flat&logo=amazonaws&logoColor=white">
 </p>
 
 <p align="center">
@@ -16,9 +16,6 @@
 </p>
 
 Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, answers questions with cited evidence, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are kept separate in code, roles and CLI.
-
-> [!WARNING]
-> **v0.4.0 prerelease.** Tested against fixtures and mocked AWS clients only. **It has not been run against a real AWS account or Bedrock yet.**
 
 ## Features
 
