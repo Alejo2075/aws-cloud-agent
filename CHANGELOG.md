@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [0.4.1] - 2026-11-07 (prerelease)
+
+### Changed
+
+- README rewritten: logo banner, badges, hackathon line, and new How it works, Architecture, Configuration, Documentation, Project status and Security sections. Banner and hackathon images moved to `docs/assets/`. No code changes.
+
 ## [0.4.0] - 2026-11-07 (prerelease)
 
 ### Added
