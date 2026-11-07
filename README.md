@@ -1,24 +1,38 @@
-# Cloud Agent
+<p align="center">
+  <img src="docs/assets/cloud-agent-banner.gif" alt="Cloud Agent" width="100%">
+</p>
 
-Evidence-backed understanding of **existing** AWS applications, with approval-gated changes. Cloud Agent discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and (after explicit approval) apply changes to an application you already run.
+Cloud Agent is an open-source, TypeScript agent that understands **existing** AWS applications and helps you change them safely. It discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are separated in code, roles and CLI. It is not a greenfield app generator and not an unrestricted AWS admin tool.
 
-> **Status: v0.3.0 prerelease.** Everything is implemented and tested against fixtures and mocked AWS SDK clients. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
+> **Status: v0.4.0 prerelease.** Everything is implemented and tested against fixtures, mocked AWS SDK clients and local CDK synthesis. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
 
-It is not a greenfield app generator and not an unrestricted AWS admin tool. Reads and writes are separated in code, roles and CLI.
+<table>
+  <tr>
+    <td width="120" align="center">
+      <a href="https://aws-agent-hackathon.devpost.com/"><img src="docs/assets/aws-ai-agent-hackathon.png" alt="AWS AI Agent Global Hackathon" width="100"></a>
+    </td>
+    <td>
+      This project is part of the <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>.
+    </td>
+  </tr>
+</table>
 
 ## Capabilities
 
-| Area           | What it does today                                                                                                                                                                                                                                                     |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Observe        | Scoped, read-only discovery of CloudFormation stacks, tagged resources and explicit ARNs: Lambda, API Gateway (HTTP), DynamoDB, SQS, SNS, S3, EventBridge. Relationships carry provenance (`discovery` vs `inferred`).                                                 |
-| Ask            | Bedrock-backed Q&A using read-only tools. Citations are validated against real tool output; unverifiable citations are removed and the answer says so.                                                                                                                 |
-| Operate (read) | Bounded CloudWatch metrics, Lambda log search, deployment history (CloudFormation, CloudTrail), cost by tag, repository and IaC inspection. Log text and cost data need explicit per-connection consent.                                                               |
-| Plan           | Model-proposed change plans with a derived risk class and an immutable hash. Nothing is applied.                                                                                                                                                                       |
-| Change         | State machine, approvals bound to plan hash, source revision, environment, account, region, actor and expiry; drift/stale-plan invalidation; idempotent apply through a CloudFormation change-set deployer; verification; hash-chained audit log.                      |
-| Source changes | Plans can carry patches. After approval, `changes apply` creates a new `cloud-agent/<change-id>` branch in an isolated git worktree (your working tree is untouched), re-verifies the staged files, and only pushes / opens a PR when you pass `--push` / `--pr-base`. |
-| HTTP API       | `apps/api`: framework-agnostic handlers plus an API Gateway HTTP API (v2) adapter. Authenticated, per-system authorized, rate-limited; supports graph, ask, change review and approval. It cannot plan or apply. Not deployed by this repo.                            |
-| Plugins        | Hash-pinned read-only tool plugins, in-process or in a permission-restricted process with `--isolated` (Node 25+).                                                                                                                                                     |
-| Import         | `CloudSystemManifest` v1 ([JSON Schema](docs/integration/cloud-system-manifest.schema.json)) as a hint, reconciled against live discovery.                                                                                                                             |
+| Area           | What it does today                                                                                                                                                                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Observe        | Scoped, read-only discovery of CloudFormation stacks, tagged resources and explicit ARNs: Lambda, API Gateway (HTTP and REST), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS services and RDS instances. Relationships carry provenance (`discovery` vs `inferred`). |
+| Ask            | Bedrock-backed Q&A using read-only tools. Citations are validated against real tool output; unverifiable citations are removed and the answer says so.                                                                                                                                   |
+| Operate (read) | Bounded CloudWatch metrics, Lambda log search, deployment history (CloudFormation, CloudTrail), cost by tag, repository and IaC inspection. Log text and cost data need explicit per-connection consent.                                                                                 |
+| Plan           | Model-proposed change plans with a derived risk class and an immutable hash. Nothing is applied.                                                                                                                                                                                         |
+| Change         | State machine; approvals bound to plan hash, source revision, environment, account, region, actor and expiry; drift and stale-plan invalidation; idempotent apply through a CloudFormation change-set deployer; hash-chained audit log.                                                  |
+| Source changes | Plans can carry patches. After approval, `changes apply` creates a new `cloud-agent/<change-id>` branch in an isolated git worktree (your working tree is untouched), re-verifies the staged files, and only pushes or opens a PR when you pass `--push` / `--pr-base`.                  |
+| Verify         | Criteria can be checked automatically: `metric` criteria against recent CloudWatch data, and `http` criteria against hosts you allow (HTTPS GET only, public addresses only). Both fail closed; anything else is confirmed manually.                                                     |
+| Validate       | A local worker for convenience, or an ephemeral CodeBuild project (`changes validate --codebuild`) for isolated builds. Terraform checks run only in isolated workers ([guide](docs/terraform.md)).                                                                                      |
+| HTTP API       | `apps/api`: framework-agnostic handlers plus an API Gateway HTTP API adapter. Authenticated, per-system authorized, rate-limited; graph, ask, change review and approval. It cannot plan or apply.                                                                                       |
+| Hosted state   | `@cloud-agent/stores-aws` (DynamoDB change store and audit log, S3 graph and evidence) and a CDK stack in `infra/`. See [hosted deployment](docs/hosted-deployment.md).                                                                                                                  |
+| Plugins        | Hash-pinned read-only tool plugins, in-process or in a permission-restricted process with `--isolated` (Node 25+).                                                                                                                                                                       |
+| Import         | `CloudSystemManifest` v1 ([JSON Schema](docs/integration/cloud-system-manifest.schema.json)) as a hint, reconciled against live discovery.                                                                                                                                               |
 
 ## Requirements
 
@@ -67,7 +81,7 @@ State lives in `~/.cloud-agent` (override with `CLOUD_AGENT_HOME`). Credentials 
 
 ## Architecture
 
-Packages under `packages/` (plus `apps/cli` and `apps/api`): `contracts` (Zod schemas), `connections` (scope), `tools-aws` (read-only ports and SDK adapters), `discovery`, `graph`, `evidence` (redaction, store, audit), `manifest`, `tools-git`, `agent` (tools, ask, planner), `changes` (plans, policy, state machine), `validation`, `deployments`; CLI in `apps/cli`. Details: [architecture](docs/architecture.md), [security model](docs/security-model.md), [change lifecycle](docs/change-lifecycle.md).
+Packages under `packages/` (plus `apps/cli`, `apps/api` and `infra/`): `contracts` (Zod schemas), `connections` (scope), `tools-aws` (read-only ports and SDK adapters), `discovery`, `graph`, `evidence` (redaction, store, audit), `manifest`, `tools-git`, `agent` (tools, ask, planner), `changes` (plans, policy, state machine), `validation`, `deployments`, `stores-aws`; CLI in `apps/cli`. Details: [architecture](docs/architecture.md), [security model](docs/security-model.md), [change lifecycle](docs/change-lifecycle.md).
 
 ## Testing
 
@@ -76,13 +90,12 @@ Packages under `packages/` (plus `apps/cli` and `apps/api`): `contracts` (Zod sc
 ## Known limitations
 
 - **Not verified live.** No run against a real account, Bedrock, CodeBuild or CloudFormation. Expect integration bugs.
-- Resource coverage: Lambda, API Gateway (HTTP), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, API Gateway REST APIs (v1), ECS services and RDS instances (RDS and ECS services have metrics; REST APIs do not yet because CloudWatch keys them by API name, which the graph does not carry). X-Ray, ECS clusters, RDS clusters and other types are listed without configuration or edges, and the graph reports this as a gap.
-- Drift detection covers topology and the stable configuration summary of supported resources; resources without a describer are not covered. The health gate checks CloudFormation stack status and firing CloudWatch alarms that reference in-scope resources (composite alarms count as blocking); if alarm status cannot be verified the apply is blocked unless you pass `--ignore-alarms`, which is audited. There are no SLO checks.
-- The local validation worker is a convenience, not a sandbox. `CodeBuildValidator` exists for isolated builds but is only tested with mocks and is not yet selectable from the CLI.
-- The planner proposes plans and patches as data. A plan deploys either a CloudFormation template you supply (bound to the approved plan by sha256) or its patches on a new branch; hand-edited or already-modified branches are never touched.
-- Terraform is detected and its changes can travel through the branch/PR path, but there is no `plan`/`apply` adapter (that would need real state and credentials). Terraform checks (`terraformChecks`) are for isolated workers only and are refused by the local validator.
-- `apps/api` is code only: there is no CDK stack, no DynamoDB/S3-backed stores and no identity provider integration, so deploying it is up to you. See [ROADMAP](ROADMAP.md).
-- Verification of metric/HTTP criteria is manual (`--confirm`).
+- Resource coverage: see the Observe row above. REST APIs have no metrics yet (CloudWatch keys them by API name, which the graph does not carry). X-Ray, ECS clusters, RDS clusters and other types are listed without configuration or edges, and the graph reports this as a gap.
+- Drift detection covers topology and the stable configuration summary of supported resources. The health gate checks CloudFormation stack status and firing CloudWatch alarms that reference in-scope resources; if alarm status cannot be verified the apply is blocked unless you pass `--ignore-alarms`, which is audited. There are no SLO objects.
+- The local validation worker is a convenience, not a sandbox; use CodeBuild for isolation.
+- A plan deploys either a CloudFormation template you supply (bound to the approved plan by sha256) or its patches on a new branch. Hand-edited or already-modified branches are never touched. There is no Terraform `apply`.
+- `apps/api` and the stores and CDK stack are code only: no API Lambda wiring, identity provider integration or retention jobs, and nothing has been deployed. See [hosted deployment](docs/hosted-deployment.md) and the [ROADMAP](ROADMAP.md).
+- Isolated plugins need Node 25+ and fail closed on older versions.
 
 ## Contributing
 
