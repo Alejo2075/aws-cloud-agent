@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [Unreleased]
+
+### Added
+
+- Automatic verification of `metric` criteria: a plan criterion may carry a structured `check` (resource, metric, stat, comparator, threshold, window of 5-360 minutes). `changes verify` evaluates it read-only against recent telemetry and fails closed on missing data, unknown resources or query errors. Verified with mocks only; not run against real CloudWatch.
+
 ## [0.3.0] - 2026-11-06 (prerelease)
 
 ### Added

@@ -11,7 +11,7 @@ import { fingerprintGraph } from "@cloud-agent/graph";
 import { isStackHealthy, physicalIdFromArn } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { GitBranchDeployer } from "@cloud-agent/deployments";
-import { LocalWorkerValidator } from "@cloud-agent/validation";
+import { LocalWorkerValidator, createMetricVerifier } from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
 import type { ProfileStore } from "./profiles.js";
@@ -364,9 +364,9 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
   common(changes.command("verify <changeId>"))
     .option("--confirm <ids>", "comma-separated criteria you confirmed manually", "")
     .action(async (id, o) => {
-      const { svc } = await locate(id, o.system, o.env);
+      const { p, svc } = await locate(id, o.system, o.env);
       const confirmed = new Set(String(o.confirm).split(",").filter(Boolean));
-      const verifier: Verifier = {
+      const manual: Verifier = {
         async verify(plan) {
           return plan.verification.map((v) =>
             confirmed.has(v.id)
@@ -382,6 +382,33 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
           );
         },
       };
+      const graph = await c.loadGraph(p);
+      const observe = graph ? (await deps.session(p)).observe : undefined;
+      const resolve = (rid: string) => {
+        const r = graph?.resources.find((x) => x.id === rid && x.arn);
+        return r?.arn && graph
+          ? { id: r.id, arn: r.arn, type: r.type, physicalId: physicalIdFromArn(r.arn, graph) }
+          : undefined;
+      };
+      const verifier: Verifier = observe
+        ? createMetricVerifier({
+            now: deps.now,
+            rest: manual,
+            source: {
+              resolve,
+              query: (rid, check, range) => {
+                const resource = resolve(rid);
+                if (!resource) throw new Error(`no in-scope resource ${rid}`);
+                return observe.queryMetrics({
+                  resource,
+                  metric: check.metric,
+                  stat: check.stat,
+                  range,
+                });
+              },
+            },
+          })
+        : manual;
       deps.out(formatChange(await svc.verify(id, verifier, deps.actor)));
     });
 }

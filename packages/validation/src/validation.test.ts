@@ -3,13 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { finalizePlan } from "@cloud-agent/changes";
+import type { Verifier } from "@cloud-agent/changes";
 import { mockClient } from "aws-sdk-client-mock";
 import {
   BatchGetBuildsCommand,
   CodeBuildClient,
   StartBuildCommand,
 } from "@aws-sdk/client-codebuild";
-import { CodeBuildValidator, LocalWorkerValidator, scrubbedEnv } from "./index.js";
+import {
+  CodeBuildValidator,
+  LocalWorkerValidator,
+  createMetricVerifier,
+  scrubbedEnv,
+} from "./index.js";
 
 const plan = finalizePlan({
   changeId: "c1",
@@ -145,5 +151,63 @@ describe("terraformChecks", () => {
           allowed: [{ name: "x", file: "/usr/local/bin/tofu", args: [] }],
         }),
     ).toThrow("isolated worker");
+  });
+});
+
+describe("createMetricVerifier", () => {
+  const check = {
+    type: "metric" as const,
+    resourceId: "fn",
+    metric: "Errors",
+    stat: "Sum" as const,
+    comparator: "lte" as const,
+    threshold: 0,
+    windowMinutes: 15,
+  };
+  const plan = (checks: unknown[]) =>
+    ({
+      verification: checks,
+    }) as unknown as Parameters<Verifier["verify"]>[0];
+  const rest: Verifier = {
+    verify: async (p) => p.verification.map((v) => ({ id: v.id, passed: false, detail: "manual" })),
+  };
+  const mk = (summary: unknown, resolves = true) =>
+    createMetricVerifier({
+      now: () => new Date("2026-11-06T12:00:00Z"),
+      rest,
+      source: {
+        resolve: (id) => (resolves ? { id } : undefined),
+        query: async () => ({ summary }) as never,
+      },
+    });
+  const crit = { id: "m", description: "no errors", kind: "metric" as const, check };
+
+  it("passes and fails on the threshold and delegates other criteria", async () => {
+    const ok = await mk({ count: 3, sum: 0 }).verify(
+      plan([crit, { id: "x", description: "d", kind: "manual" }]),
+    );
+    expect(ok.map((r) => [r.id, r.passed])).toEqual([
+      ["m", true],
+      ["x", false],
+    ]);
+    const bad = await mk({ count: 3, sum: 4 }).verify(plan([crit]));
+    expect(bad[0]).toMatchObject({ passed: false });
+    expect(bad[0]?.detail).toContain("= 4");
+  });
+
+  it("fails closed with no data, unknown resources and query errors", async () => {
+    expect((await mk({ count: 0 }).verify(plan([crit])))[0]?.detail).toContain("cannot verify");
+    expect((await mk({ count: 1, sum: 0 }, false).verify(plan([crit])))[0]?.passed).toBe(false);
+    const boom = createMetricVerifier({
+      now: () => new Date(),
+      rest,
+      source: {
+        resolve: (id) => ({ id }),
+        query: async () => {
+          throw new Error("denied");
+        },
+      },
+    });
+    expect((await boom.verify(plan([crit])))[0]?.detail).toContain("denied");
   });
 });
