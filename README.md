@@ -19,11 +19,20 @@ Cloud Agent is an open-source TypeScript agent for **existing** AWS applications
 
 ## Features
 
-- **Observe**: scoped, read-only discovery into a system graph (Lambda, API Gateway, DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS, RDS).
+- **Observe**: scoped, read-only discovery into a system graph (Lambda, API Gateway, DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS, RDS). Every relationship says whether it was discovered or inferred.
 - **Ask**: Bedrock Q&A over read-only tools; unverifiable citations are removed.
 - **Operate**: bounded metrics, logs, deployment history, cost and repository inspection (logs and cost need explicit consent).
 - **Change**: plans bound to an immutable hash, approvals tied to the exact plan and target, applied through CloudFormation change sets or a new git branch, then verified and audited.
 - **Extend**: hash-pinned read-only plugins (optionally isolated), `CloudSystemManifest` import, DynamoDB/S3 stores and a CDK stack.
+
+## How it works
+
+1. **Connect**: you declare a scope (stacks, tags or ARNs) and a read-only role. Nothing outside it is touched.
+2. **Discover**: the agent describes in-scope resources and builds a graph with provenance, freshness and known gaps.
+3. **Ask**: questions are answered with read-only tools; every claim cites a recorded observation.
+4. **Plan**: a change request becomes a plan with a risk class and a hash. It is a proposal; nothing is applied.
+5. **Approve**: a person approves the exact plan for one account, region and environment. Drift or a moved revision invalidates the approval.
+6. **Apply and verify**: a deployer with a separate write role applies it, criteria are checked, and every step lands in a hash-chained audit log.
 
 ## Quick start
 
@@ -43,16 +52,66 @@ cloud-agent plan --system restaurant-app "Set the checkout timeout to 20 seconds
 cloud-agent changes approve <change-id> --system restaurant-app
 ```
 
-Run from source with `pnpm --filter @cloud-agent/cli start -- --help`. State lives in `~/.cloud-agent`; credentials are never stored.
+Run from source with `pnpm --filter @cloud-agent/cli start -- --help`.
 
-## Limitations
+## Architecture
 
-- **Not verified live** against real AWS, Bedrock, CodeBuild or CloudFormation. Expect integration bugs.
+```text
+CLI / API ─► policy + scope ─► agent (read-only tools) ─► system graph + evidence ─► answer
+                  └─► change service ─► plan ─► validate ─► approval ─► deployer ─► verify
+                                every step ─► hash-chained audit log
+```
+
+- **Read and write are separate.** The AWS read ports only list, describe and get; the only writers are deployers, and they need an authorization that only the policy check can mint.
+- **Everything external is untrusted.** Logs, repository files and tool output are wrapped and redacted before they reach a model.
+- **Storage sits behind interfaces**, with file-based stores by default and DynamoDB/S3 implementations available.
+
+| Path                                                          | Purpose                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------- |
+| `apps/cli`, `apps/api`                                        | Command line and HTTP handlers                          |
+| `packages/agent`, `packages/tools-*`                          | Orchestration, plugins and read-only AWS and git tools  |
+| `packages/discovery`, `graph`, `evidence`                     | Discovery, system graph, redaction and audit log        |
+| `packages/changes`, `validation`, `deployments`               | Plans, state machine, validators and deployers          |
+| `packages/contracts`, `connections`, `manifest`, `stores-aws` | Schemas, scoping, manifest import and AWS-backed stores |
+| `infra`                                                       | CDK stack for Cloud Agent's own state                   |
+
+## Configuration
+
+| Setting                           | Purpose                                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUD_AGENT_HOME`                | State directory (default `~/.cloud-agent`): profiles, graphs, evidence, changes, audit log. Credentials are never stored. |
+| `CLOUD_AGENT_MODEL_ID`            | Bedrock model or inference profile id (or `--model`).                                                                     |
+| `connect --stack / --tag / --arn` | Scope selectors; repeat them to add more.                                                                                 |
+| `connect --role-arn`              | Read-only role, assumed per run. `--planning-role-arn` and `--write-role-arn` are separate.                               |
+| `connect --repo`                  | Local checkout to inspect and, after approval, branch from.                                                               |
+| `connect --event-bus`             | EventBridge bus that receives change lifecycle events (identifiers and states only).                                      |
+| `connect --verify-host`           | Hostnames that `http` verification criteria may call. None by default.                                                    |
+| `connect --manifest`              | `CloudSystemManifest` used as a hint and checked against live discovery.                                                  |
+| `plugins add [--isolated]`        | Pin a read-only plugin by sha256; `--isolated` runs it in a restricted process (Node 25+).                                |
+
+Consent for log contents and cost data is off by default and set per connection profile.
+
+## Documentation
+
+- [Architecture](docs/architecture.md) and [security model](docs/security-model.md)
+- [Change lifecycle](docs/change-lifecycle.md)
+- [Terraform through an isolated worker](docs/terraform.md)
+- [Hosted deployment](docs/hosted-deployment.md)
+- [CloudSystemManifest schema](docs/integration/cloud-system-manifest.schema.json) and [CHANGELOG](CHANGELOG.md)
+
+## Project status & roadmap
+
+**v0.4.0 prerelease.** Tested against fixtures, mocked AWS clients and local CDK synthesis. **It has not been run against a real AWS account or Bedrock yet**; expect integration bugs.
+
 - The HTTP API, DynamoDB/S3 stores and CDK stack are code only and have not been deployed.
 - No Terraform apply, no SLO objects, and some resource types are listed without configuration.
 
-More in the [ROADMAP](ROADMAP.md). Docs: [architecture](docs/architecture.md), [change lifecycle](docs/change-lifecycle.md), [hosted deployment](docs/hosted-deployment.md).
+Next: verification in an isolated test account (needs the owner's opt-in), hosted deployment wiring, more resource coverage. See the [ROADMAP](ROADMAP.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). Licensed under [Apache-2.0](LICENSE).
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; the product specification and engineering rules are in [CLAUDE.md](CLAUDE.md). `pnpm check` must pass.
+
+## Security & license
+
+Report vulnerabilities privately through GitHub (Security, then Report a vulnerability); see [SECURITY.md](SECURITY.md). Licensed under [Apache-2.0](LICENSE).
