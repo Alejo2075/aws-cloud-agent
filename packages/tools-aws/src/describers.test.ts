@@ -314,3 +314,100 @@ describe("Step Functions and Kinesis", () => {
     expect(d.summary).toMatchObject({ mode: "PROVISIONED", openShards: 2, retentionHours: 24 });
   });
 });
+
+describe("REST API, ECS and RDS", () => {
+  it("graphs REST API lambda integrations across pages and notes external hosts", async () => {
+    const { mockClient: mc } = await import("aws-sdk-client-mock");
+    const { APIGatewayClient, GetResourcesCommand, GetRestApiCommand } =
+      await import("@aws-sdk/client-api-gateway");
+    const gw = mc(APIGatewayClient);
+    gw.on(GetRestApiCommand).resolves({
+      name: "orders",
+      endpointConfiguration: { types: ["REGIONAL"] },
+    });
+    const lambdaUri =
+      "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:orders/invocations";
+    gw.on(GetResourcesCommand)
+      .resolvesOnce({
+        position: "p2",
+        items: [
+          {
+            path: "/orders",
+            resourceMethods: { GET: { methodIntegration: { type: "AWS_PROXY", uri: lambdaUri } } },
+          },
+        ],
+      })
+      .resolvesOnce({
+        items: [
+          {
+            path: "/ext",
+            resourceMethods: {
+              POST: { methodIntegration: { type: "HTTP", uri: "https://example.test/x" } },
+            },
+          },
+        ],
+      });
+    const arn = arnFor("AWS::ApiGateway::RestApi", "abc123", ctx)!;
+    const d = await port.describeResource({
+      arn,
+      physicalId: "abc123",
+      type: "AWS::ApiGateway::RestApi",
+    });
+    expect(d.links.map((l) => l.to)).toEqual([
+      "arn:aws:lambda:us-east-1:123456789012:function:orders",
+    ]);
+    expect(d.summary).toMatchObject({ name: "orders", routes: ["GET /orders", "POST /ext"] });
+    expect(d.limitations.join()).toContain("example.test");
+  });
+
+  it("describes an ECS service and RDS instance and round-trips their ARNs", async () => {
+    const { mockClient: mc } = await import("aws-sdk-client-mock");
+    const { ECSClient, DescribeServicesCommand } = await import("@aws-sdk/client-ecs");
+    const { RDSClient, DescribeDBInstancesCommand } = await import("@aws-sdk/client-rds");
+    const tg = "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/tg/1";
+    const ecs = mc(ECSClient);
+    ecs.on(DescribeServicesCommand).resolves({
+      services: [
+        {
+          status: "ACTIVE",
+          desiredCount: 2,
+          runningCount: 2,
+          loadBalancers: [{ targetGroupArn: tg }],
+        },
+      ],
+    });
+    mc(RDSClient)
+      .on(DescribeDBInstancesCommand)
+      .resolves({
+        DBInstances: [
+          { Engine: "postgres", MultiAZ: true, PubliclyAccessible: false, StorageEncrypted: true },
+        ],
+      });
+    const svcArn = "arn:aws:ecs:us-east-1:123456789012:service/prod/web";
+    expect(arnFor("AWS::ECS::Service", svcArn, ctx)).toBe(svcArn);
+    expect(physicalIdFromArn(svcArn, ctx)).toBe(svcArn);
+    const s = await port.describeResource({
+      arn: svcArn,
+      physicalId: svcArn,
+      type: "AWS::ECS::Service",
+    });
+    expect(ecs.commandCalls(DescribeServicesCommand)[0]?.args[0].input).toMatchObject({
+      cluster: "prod",
+    });
+    expect(s.summary).toMatchObject({ cluster: "prod", desiredCount: 2 });
+    expect(s.links[0]?.to).toBe(tg);
+    const dbArn = arnFor("AWS::RDS::DBInstance", "orders-db", ctx)!;
+    expect(dbArn).toBe("arn:aws:rds:us-east-1:123456789012:db:orders-db");
+    expect(physicalIdFromArn(dbArn, ctx)).toBe("orders-db");
+    const db = await port.describeResource({
+      arn: dbArn,
+      physicalId: "orders-db",
+      type: "AWS::RDS::DBInstance",
+    });
+    expect(db.summary).toMatchObject({
+      engine: "postgres",
+      multiAz: true,
+      publiclyAccessible: false,
+    });
+  });
+});

@@ -3,6 +3,9 @@ import {
   GetRoutesCommand,
   GetApiCommand,
 } from "@aws-sdk/client-apigatewayv2";
+import { GetResourcesCommand, GetRestApiCommand } from "@aws-sdk/client-api-gateway";
+import { DescribeServicesCommand } from "@aws-sdk/client-ecs";
+import { DescribeDBInstancesCommand } from "@aws-sdk/client-rds";
 import { DescribeRuleCommand, ListTargetsByRuleCommand } from "@aws-sdk/client-eventbridge";
 import {
   GetFunctionConfigurationCommand,
@@ -436,6 +439,130 @@ export async function describeStream(c: AwsClients, t: DescribeTarget): Promise<
   };
 }
 
+export async function describeRestApi(c: AwsClients, t: DescribeTarget): Promise<ResourceDetail> {
+  const limitations: string[] = [];
+  let api;
+  try {
+    api = await c.restApi.send(new GetRestApiCommand({ restApiId: t.physicalId }));
+  } catch (e) {
+    if (isAccessDenied(e)) throw new AccessDeniedError("apigateway:GET", e);
+    throw e;
+  }
+  const links: ResourceLink[] = [];
+  const external = new Set<string>();
+  const routes: string[] = [];
+  const items = await optional("apigateway:GET resources", limitations, async () => {
+    const out = [];
+    let position: string | undefined;
+    do {
+      const r = await c.restApi.send(
+        new GetResourcesCommand({
+          restApiId: t.physicalId,
+          embed: ["methods"],
+          ...(position && { position }),
+        }),
+      );
+      out.push(...(r.items ?? []));
+      position = r.position;
+    } while (position);
+    return out;
+  });
+  for (const res of items ?? []) {
+    for (const [verb, m] of Object.entries(res.resourceMethods ?? {})) {
+      routes.push(`${verb} ${res.path ?? ""}`);
+      const uri = m.methodIntegration?.uri ?? "";
+      const arn = /(arn:aws:lambda:[^/]+:function:[^/:]+(?::[^/]+)?)/.exec(uri)?.[1];
+      if (arn)
+        links.push(
+          ...link(
+            t.arn,
+            arn,
+            "invokes",
+            `${verb} ${res.path ?? ""} (${m.methodIntegration?.type ?? ""})`,
+          ),
+        );
+      else if (uri.startsWith("http")) external.add(new URL(uri).host);
+    }
+  }
+  if (external.size)
+    limitations.push(`non-AWS integration hosts not graphed: ${[...external].join(", ")}`);
+  return {
+    summary: {
+      name: api.name,
+      endpointTypes: api.endpointConfiguration?.types,
+      routes: routes.sort(),
+    },
+    links,
+    limitations,
+  };
+}
+
+export async function describeEcsService(
+  c: AwsClients,
+  t: DescribeTarget,
+): Promise<ResourceDetail> {
+  const limitations: string[] = [];
+  // New-format ARNs are service/<cluster>/<name>; the old format has no cluster segment.
+  const parts = (t.arn.split(":")[5] ?? "").split("/");
+  const cluster = parts.length >= 3 ? parts[1] : "default";
+  if (parts.length < 3) limitations.push("old-format service ARN: assumed the default cluster");
+  let svc;
+  try {
+    svc = (await c.ecs.send(new DescribeServicesCommand({ cluster, services: [t.arn] })))
+      .services?.[0];
+  } catch (e) {
+    if (isAccessDenied(e)) throw new AccessDeniedError("ecs:DescribeServices", e);
+    throw e;
+  }
+  if (!svc) {
+    return { summary: {}, links: [], limitations: [...limitations, "service not found"] };
+  }
+  const links = (svc.loadBalancers ?? []).flatMap((lb) =>
+    link(t.arn, lb.targetGroupArn, "depends-on", "load balancer target group"),
+  );
+  return {
+    summary: {
+      cluster,
+      status: svc.status,
+      desiredCount: svc.desiredCount,
+      runningCount: svc.runningCount,
+      launchType: svc.launchType,
+      taskDefinition: svc.taskDefinition,
+    },
+    links,
+    limitations,
+  };
+}
+
+export async function describeDbInstance(
+  c: AwsClients,
+  t: DescribeTarget,
+): Promise<ResourceDetail> {
+  let db;
+  try {
+    db = (await c.rds.send(new DescribeDBInstancesCommand({ DBInstanceIdentifier: t.physicalId })))
+      .DBInstances?.[0];
+  } catch (e) {
+    if (isAccessDenied(e)) throw new AccessDeniedError("rds:DescribeDBInstances", e);
+    throw e;
+  }
+  return {
+    summary: {
+      engine: db?.Engine,
+      engineVersion: db?.EngineVersion,
+      instanceClass: db?.DBInstanceClass,
+      status: db?.DBInstanceStatus,
+      multiAz: db?.MultiAZ,
+      encrypted: db?.StorageEncrypted,
+      publiclyAccessible: db?.PubliclyAccessible,
+      backupRetentionDays: db?.BackupRetentionPeriod,
+      deletionProtection: db?.DeletionProtection,
+    },
+    links: [],
+    limitations: [],
+  };
+}
+
 export const DESCRIBERS: Record<
   string,
   (c: AwsClients, t: DescribeTarget) => Promise<ResourceDetail>
@@ -449,4 +576,7 @@ export const DESCRIBERS: Record<
   "AWS::SQS::Queue": describeQueue,
   "AWS::StepFunctions::StateMachine": describeStateMachine,
   "AWS::Kinesis::Stream": describeStream,
+  "AWS::ApiGateway::RestApi": describeRestApi,
+  "AWS::ECS::Service": describeEcsService,
+  "AWS::RDS::DBInstance": describeDbInstance,
 };
