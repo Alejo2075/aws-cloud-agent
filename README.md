@@ -2,37 +2,92 @@
   <img src="docs/assets/cloud-agent-banner.gif" alt="Cloud Agent" width="100%">
 </p>
 
-Cloud Agent is an open-source, TypeScript agent that understands **existing** AWS applications and helps you change them safely. It discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are separated in code, roles and CLI. It is not a greenfield app generator and not an unrestricted AWS admin tool.
+<p align="center">
+  <b>Understand, question and safely evolve the AWS applications you already run.</b><br>
+  Evidence-backed answers · Read-only first · Approval-gated changes
+</p>
 
-> **Status: v0.4.0 prerelease.** Everything is implemented and tested against fixtures, mocked AWS SDK clients and local CDK synthesis. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
+<p align="center">
+  <a href="https://github.com/Alejo2075/aws-cloud-agent/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Alejo2075/aws-cloud-agent/ci.yml?branch=main&label=CI&style=for-the-badge"></a>
+  <a href="https://github.com/Alejo2075/aws-cloud-agent/releases"><img alt="Release" src="https://img.shields.io/github/v/release/Alejo2075/aws-cloud-agent?include_prereleases&style=for-the-badge"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue?style=for-the-badge"></a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=for-the-badge&logo=typescript&logoColor=white">
+  <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon-Bedrock-ff9900?style=for-the-badge&logo=amazonaws&logoColor=white">
+</p>
 
-<table>
-  <tr>
-    <td width="120" align="center">
-      <a href="https://aws-agent-hackathon.devpost.com/"><img src="docs/assets/aws-ai-agent-hackathon.png" alt="AWS AI Agent Global Hackathon" width="100"></a>
-    </td>
-    <td>
-      This project is part of the <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>.
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="#what-it-does">What it does</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#security-by-design">Security</a> ·
+  <a href="#known-limitations">Limitations</a> ·
+  <a href="ROADMAP.md">Roadmap</a>
+</p>
 
-## Capabilities
+<br>
 
-| Area           | What it does today                                                                                                                                                                                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Observe        | Scoped, read-only discovery of CloudFormation stacks, tagged resources and explicit ARNs: Lambda, API Gateway (HTTP and REST), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS services and RDS instances. Relationships carry provenance (`discovery` vs `inferred`). |
-| Ask            | Bedrock-backed Q&A using read-only tools. Citations are validated against real tool output; unverifiable citations are removed and the answer says so.                                                                                                                                   |
-| Operate (read) | Bounded CloudWatch metrics, Lambda log search, deployment history (CloudFormation, CloudTrail), cost by tag, repository and IaC inspection. Log text and cost data need explicit per-connection consent.                                                                                 |
-| Plan           | Model-proposed change plans with a derived risk class and an immutable hash. Nothing is applied.                                                                                                                                                                                         |
-| Change         | State machine; approvals bound to plan hash, source revision, environment, account, region, actor and expiry; drift and stale-plan invalidation; idempotent apply through a CloudFormation change-set deployer; hash-chained audit log.                                                  |
-| Source changes | Plans can carry patches. After approval, `changes apply` creates a new `cloud-agent/<change-id>` branch in an isolated git worktree (your working tree is untouched), re-verifies the staged files, and only pushes or opens a PR when you pass `--push` / `--pr-base`.                  |
-| Verify         | Criteria can be checked automatically: `metric` criteria against recent CloudWatch data, and `http` criteria against hosts you allow (HTTPS GET only, public addresses only). Both fail closed; anything else is confirmed manually.                                                     |
-| Validate       | A local worker for convenience, or an ephemeral CodeBuild project (`changes validate --codebuild`) for isolated builds. Terraform checks run only in isolated workers ([guide](docs/terraform.md)).                                                                                      |
-| HTTP API       | `apps/api`: framework-agnostic handlers plus an API Gateway HTTP API adapter. Authenticated, per-system authorized, rate-limited; graph, ask, change review and approval. It cannot plan or apply.                                                                                       |
-| Hosted state   | `@cloud-agent/stores-aws` (DynamoDB change store and audit log, S3 graph and evidence) and a CDK stack in `infra/`. See [hosted deployment](docs/hosted-deployment.md).                                                                                                                  |
-| Plugins        | Hash-pinned read-only tool plugins, in-process or in a permission-restricted process with `--isolated` (Node 25+).                                                                                                                                                                       |
-| Import         | `CloudSystemManifest` v1 ([JSON Schema](docs/integration/cloud-system-manifest.schema.json)) as a hint, reconciled against live discovery.                                                                                                                                               |
+<p align="center">
+  <a href="https://aws-agent-hackathon.devpost.com/">
+    <img src="docs/assets/aws-ai-agent-hackathon.png" alt="AWS AI Agent Global Hackathon" width="140">
+  </a>
+</p>
+
+<p align="center">
+  <b>This project is part of the</b><br>
+  <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>
+</p>
+
+<br>
+
+Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and, only after explicit approval, apply changes. It is not a greenfield app generator and not an unrestricted AWS admin tool: reads and writes are separated in code, roles and CLI.
+
+> [!WARNING]
+> **v0.4.0 prerelease.** Everything is implemented and tested against fixtures, mocked AWS SDK clients and local CDK synthesis. **It has not been run against a real AWS account or real Bedrock yet.** See [Known limitations](#known-limitations).
+
+## What it does
+
+### 🔎 Understand
+
+- **Observe** — scoped, read-only discovery of CloudFormation stacks, tagged resources and explicit ARNs: Lambda, API Gateway (HTTP and REST), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS services and RDS instances. Every relationship carries provenance (`discovery` vs `inferred`).
+- **Ask** — Bedrock-backed Q&A over read-only tools. Citations are validated against real tool output; unverifiable ones are removed and the answer says so.
+- **Operate (read)** — bounded CloudWatch metrics, Lambda log search, deployment history, cost by tag, repository and IaC inspection. Log text and cost data need explicit per-connection consent.
+
+### 🛠️ Change, with approval
+
+- **Plan** — model-proposed plans with a derived risk class and an immutable hash. Nothing is applied.
+- **Approve and apply** — approvals are bound to plan hash, source revision, environment, account, region, actor and expiry. Drift or a moved revision invalidates them. Apply is idempotent, through a CloudFormation change-set deployer or a new `cloud-agent/<change-id>` git branch in an isolated worktree (push and PR only on request).
+- **Validate and verify** — local worker or ephemeral CodeBuild for isolated builds; `metric` and `http` criteria are checked automatically and fail closed; everything lands in a hash-chained audit log.
+
+### 🧩 Extend and host
+
+- **Plugins** — hash-pinned read-only tools, in-process or in a permission-restricted process with `--isolated` (Node 25+).
+- **Import** — `CloudSystemManifest` v1 ([JSON Schema](docs/integration/cloud-system-manifest.schema.json)) as a hint, reconciled against live discovery.
+- **Hosted state** — DynamoDB and S3 stores plus a CDK stack in `infra/` ([details](docs/hosted-deployment.md)); an HTTP API with authentication, per-system authorization and rate limiting in `apps/api`.
+
+## How it works
+
+```mermaid
+flowchart LR
+  U([You]) --> CLI[CLI / API]
+  CLI --> O[Observe + Ask<br/>read-only role]
+  O --> G[(System graph<br/>+ evidence)]
+  CLI --> P[Plan]
+  P --> R{{Review and approve<br/>bound to the exact plan}}
+  R -->|approved| D[Deployer<br/>separate write role]
+  D --> V[Verify]
+  V --> A[(Audit log)]
+  R -->|rejected or stale| X([Stop or re-plan])
+```
+
+## Security by design
+
+- **Read-only first.** Discovery and Q&A use a read-only role and ports that only list, describe and get. The only writers are the deployers.
+- **Approval is bound by hash** to the exact plan, target and actor; stale plans cannot be applied.
+- **Telemetry, repositories and tool output are untrusted data**, wrapped and redacted before reaching a model.
+- **Consent-gated data.** Log contents and cost data are off by default.
+- **No credentials stored.** Roles are assumed per run.
+
+Details: [security model](docs/security-model.md).
 
 ## Requirements
 
@@ -79,7 +134,7 @@ cloud-agent audit
 
 State lives in `~/.cloud-agent` (override with `CLOUD_AGENT_HOME`). Credentials are never stored; roles are assumed per run.
 
-## Architecture
+## Packages
 
 Packages under `packages/` (plus `apps/cli`, `apps/api` and `infra/`): `contracts` (Zod schemas), `connections` (scope), `tools-aws` (read-only ports and SDK adapters), `discovery`, `graph`, `evidence` (redaction, store, audit), `manifest`, `tools-git`, `agent` (tools, ask, planner), `changes` (plans, policy, state machine), `validation`, `deployments`, `stores-aws`; CLI in `apps/cli`. Details: [architecture](docs/architecture.md), [security model](docs/security-model.md), [change lifecycle](docs/change-lifecycle.md).
 
