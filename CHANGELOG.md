@@ -11,6 +11,8 @@ All notable changes are documented here. Format based on Keep a Changelog; versi
 - `infra/`: `CloudAgentStack` CDK definition (tables, private bucket, read-only role), checked by local synthesis tests. Not deployed or verified live; see docs/hosted-deployment.md.
 
 - Isolated plugins: `plugins add --isolated` runs a plugin in a separate Node process under the permission model (no network, child processes, workers, addons or writes; reads only the pinned file; empty environment). The host verifies the restrictions and fails closed, including on Node versions older than 25. A CI job exercises it on Node 26.
+- Automatic verification of `http` criteria: HTTPS GET only, to hostnames the connection lists with `connect --verify-host` (none by default); no IP literals, credentials, custom ports or redirects; DNS answers are checked at connect time and any non-public address is refused. Mock-tested; not run against a real service.
+- docs/terraform.md: Terraform validation through an isolated CodeBuild worker with an example buildspec.
 
 ## [0.3.2] - 2026-11-07 (prerelease)
 
