@@ -1,10 +1,13 @@
+import { APIGatewayClient } from "@aws-sdk/client-api-gateway";
 import { ApiGatewayV2Client } from "@aws-sdk/client-apigatewayv2";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { ECSClient } from "@aws-sdk/client-ecs";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { KinesisClient } from "@aws-sdk/client-kinesis";
 import { LambdaClient } from "@aws-sdk/client-lambda";
 import { SFNClient } from "@aws-sdk/client-sfn";
+import { RDSClient } from "@aws-sdk/client-rds";
 import { ResourceGroupsTaggingAPIClient } from "@aws-sdk/client-resource-groups-tagging-api";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SNSClient } from "@aws-sdk/client-sns";
@@ -25,6 +28,9 @@ export interface AwsClients {
   tagging: ResourceGroupsTaggingAPIClient;
   sfn: SFNClient;
   kinesis: KinesisClient;
+  restApi: APIGatewayClient;
+  ecs: ECSClient;
+  rds: RDSClient;
 }
 
 export function createClients(
@@ -44,6 +50,9 @@ export function createClients(
     tagging: new ResourceGroupsTaggingAPIClient(cfg),
     sfn: new SFNClient(cfg),
     kinesis: new KinesisClient(cfg),
+    restApi: new APIGatewayClient(cfg),
+    ecs: new ECSClient(cfg),
+    rds: new RDSClient(cfg),
   };
 }
 

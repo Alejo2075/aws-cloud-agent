@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [Unreleased]
+
+### Added
+
+- Resource coverage: API Gateway REST APIs (Lambda integrations as edges), ECS services (load balancer target groups) and RDS instances (configuration summary and metrics). Mock-tested only.
+
 ## [0.3.1] - 2026-11-06 (prerelease)
 
 ### Added

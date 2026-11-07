@@ -76,7 +76,7 @@ Packages under `packages/` (plus `apps/cli` and `apps/api`): `contracts` (Zod sc
 ## Known limitations
 
 - **Not verified live.** No run against a real account, Bedrock, CodeBuild or CloudFormation. Expect integration bugs.
-- Resource coverage: Lambda, API Gateway (HTTP), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis. REST APIs (v1), ECS, RDS and others are listed without configuration or edges, and the graph reports this as a gap.
+- Resource coverage: Lambda, API Gateway (HTTP), DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, API Gateway REST APIs (v1), ECS services and RDS instances (RDS has metrics; REST API and ECS do not yet, because their metric dimensions need names or several dimensions). X-Ray, ECS clusters, RDS clusters and other types are listed without configuration or edges, and the graph reports this as a gap.
 - Drift detection covers topology and the stable configuration summary of supported resources; resources without a describer are not covered. The health gate checks CloudFormation stack status and firing CloudWatch alarms that reference in-scope resources (composite alarms count as blocking); if alarm status cannot be verified the apply is blocked unless you pass `--ignore-alarms`, which is audited. There are no SLO checks.
 - The local validation worker is a convenience, not a sandbox. `CodeBuildValidator` exists for isolated builds but is only tested with mocks and is not yet selectable from the CLI.
 - The planner proposes plans and patches as data. A plan deploys either a CloudFormation template you supply (bound to the approved plan by sha256) or its patches on a new branch; hand-edited or already-modified branches are never touched.

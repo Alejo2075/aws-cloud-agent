@@ -176,6 +176,19 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
       "ReadProvisionedThroughputExceeded",
     ],
   },
+  "AWS::RDS::DBInstance": {
+    namespace: "AWS/RDS",
+    dimension: "DBInstanceIdentifier",
+    value: (r) => r.physicalId,
+    metrics: [
+      "CPUUtilization",
+      "DatabaseConnections",
+      "FreeStorageSpace",
+      "FreeableMemory",
+      "ReadLatency",
+      "WriteLatency",
+    ],
+  },
   "AWS::Events::Rule": {
     namespace: "AWS/Events",
     dimension: "RuleName",

@@ -32,6 +32,14 @@ export function arnFor(type: string, physicalId: string, ctx: AwsContext): strin
       return physicalId.startsWith("arn:") ? physicalId : undefined;
     case "AWS::Kinesis::Stream":
       return `arn:aws:kinesis:${region}:${a}:stream/${physicalId}`;
+    case "AWS::ECS::Cluster":
+      return physicalId.startsWith("arn:")
+        ? physicalId
+        : `arn:aws:ecs:${region}:${a}:cluster/${physicalId}`;
+    case "AWS::ECS::Service":
+      return physicalId.startsWith("arn:") ? physicalId : undefined;
+    case "AWS::RDS::DBInstance":
+      return `arn:aws:rds:${region}:${a}:db:${physicalId}`;
     default:
       return undefined;
   }
@@ -49,6 +57,9 @@ const TYPE_BY_ARN: Array<[RegExp, string]> = [
   [/^arn:aws:apigateway:[^:]*::\/restapis\//, "AWS::ApiGateway::RestApi"],
   [/^arn:aws:states:[^:]*:[^:]*:stateMachine:/, "AWS::StepFunctions::StateMachine"],
   [/^arn:aws:kinesis:[^:]*:[^:]*:stream\//, "AWS::Kinesis::Stream"],
+  [/^arn:aws:ecs:[^:]*:[^:]*:cluster\//, "AWS::ECS::Cluster"],
+  [/^arn:aws:ecs:[^:]*:[^:]*:service\//, "AWS::ECS::Service"],
+  [/^arn:aws:rds:[^:]*:[^:]*:db:/, "AWS::RDS::DBInstance"],
 ];
 
 export function typeFromArn(arn: string): string {
@@ -80,6 +91,12 @@ export function physicalIdFromArn(arn: string, ctx: AwsContext): string {
       return arn;
     case "AWS::Kinesis::Stream":
       return (p[5] ?? "").replace(/^stream\//, "");
+    case "AWS::ECS::Cluster":
+      return (p[5] ?? "").replace(/^cluster\//, "");
+    case "AWS::ECS::Service":
+      return arn;
+    case "AWS::RDS::DBInstance":
+      return p[6] ?? arn;
     default:
       return arn;
   }

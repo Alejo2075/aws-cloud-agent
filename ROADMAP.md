@@ -7,5 +7,5 @@ Next, in priority order:
 1. **Live verification** in an isolated test account (explicit opt-in from the account owner): discovery, `ask`, plan → apply → verify on a sample app. Nothing in this repository has been run against real AWS yet.
 2. Hosted deployment: DynamoDB/S3-backed stores, an identity provider integration for `apps/api`, and a CDK stack for Cloud Agent itself.
 3. SLO-based health checks and automatic verification of HTTP criteria (metric criteria are automated; unreleased).
-4. More resource coverage (REST API v1, ECS, RDS, X-Ray) and Terraform plan support through an isolated worker.
+4. More resource coverage (metrics for REST API and ECS, RDS clusters, X-Ray) and Terraform plan support through an isolated worker.
 5. Plugin sandboxing (out-of-process plugins) and connection providers.
