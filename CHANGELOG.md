@@ -10,6 +10,9 @@ All notable changes are documented here. Format based on Keep a Changelog; versi
 - `@cloud-agent/stores-aws`: DynamoDB change store and hash-chained audit log (conditional appends), S3 graph and evidence stores. Mock-tested only.
 - `infra/`: `CloudAgentStack` CDK definition (tables, private bucket, read-only role), checked by local synthesis tests. Not deployed or verified live; see docs/hosted-deployment.md.
 
+- Automatic verification of `http` criteria: HTTPS GET only, to hostnames the connection lists with `connect --verify-host` (none by default); no IP literals, credentials, custom ports or redirects; DNS answers are checked at connect time and any non-public address is refused. Mock-tested; not run against a real service.
+- docs/terraform.md: Terraform validation through an isolated CodeBuild worker with an example buildspec.
+
 ## [0.3.2] - 2026-11-07 (prerelease)
 
 ### Added

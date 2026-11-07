@@ -86,6 +86,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     .option("--stack <name>", "CloudFormation stack in scope (repeatable)", collect, [] as string[])
     .option("--tag <key=value>", "resource tag in scope (repeatable)", collect, [] as string[])
     .option("--arn <arn>", "explicit resource ARN in scope (repeatable)", collect, [] as string[])
+    .option(
+      "--verify-host <host>",
+      "hostname that http verification criteria may call over HTTPS (repeatable; none by default)",
+      collect,
+      [] as string[],
+    )
     .option("--repo <path>", "local checkout of the source repository (opt-in, read-only access)")
     .option(
       "--manifest <file>",
@@ -130,6 +136,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           ...(o.writeRoleArn && { write: o.writeRoleArn }),
         },
         ...(o.eventBus && { eventBusName: o.eventBus }),
+        verificationHosts: o.verifyHost,
         ...(o.repo && { repository: { path: resolve(o.repo) } }),
       });
       await profiles.save(profile);

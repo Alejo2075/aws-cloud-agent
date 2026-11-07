@@ -11,7 +11,11 @@ import { fingerprintGraph } from "@cloud-agent/graph";
 import { isStackHealthy, physicalIdFromArn } from "@cloud-agent/tools-aws";
 import { RepoReader } from "@cloud-agent/tools-git";
 import { GitBranchDeployer } from "@cloud-agent/deployments";
-import { LocalWorkerValidator, createMetricVerifier } from "@cloud-agent/validation";
+import {
+  LocalWorkerValidator,
+  createHttpVerifier,
+  createMetricVerifier,
+} from "@cloud-agent/validation";
 import type { CliDeps } from "./deps.js";
 import { CliError } from "./profiles.js";
 import type { ProfileStore } from "./profiles.js";
@@ -390,7 +394,7 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
           ? { id: r.id, arn: r.arn, type: r.type, physicalId: physicalIdFromArn(r.arn, graph) }
           : undefined;
       };
-      const verifier: Verifier = observe
+      const metrics: Verifier = observe
         ? createMetricVerifier({
             now: deps.now,
             rest: manual,
@@ -409,6 +413,7 @@ export function registerChangeCommands(program: Command, c: ChangeCommandContext
             },
           })
         : manual;
+      const verifier = createHttpVerifier({ allowedHosts: p.verificationHosts, rest: metrics });
       deps.out(formatChange(await svc.verify(id, verifier, deps.actor)));
     });
 }

@@ -1,7 +1,7 @@
 import type { ChangePlan, Verifier } from "@cloud-agent/changes";
 
 type Criterion = ChangePlan["verification"][number];
-type MetricCheck = NonNullable<Criterion["check"]>;
+type MetricCheck = Extract<NonNullable<Criterion["check"]>, { type: "metric" }>;
 
 /** Structural subset of the observability surface, so this package does not depend on tools-aws. */
 export interface MetricSource {
@@ -39,12 +39,12 @@ export function createMetricVerifier(deps: {
     async verify(plan) {
       const delegated = await deps.rest.verify({
         ...plan,
-        verification: plan.verification.filter((v) => !v.check),
+        verification: plan.verification.filter((v) => v.check?.type !== "metric"),
       });
       const out: Awaited<ReturnType<Verifier["verify"]>> = [];
       for (const v of plan.verification) {
         const c = v.check;
-        if (!c) {
+        if (c?.type !== "metric") {
           const d = delegated.find((x) => x.id === v.id);
           if (d) out.push(d);
           continue;

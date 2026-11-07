@@ -13,7 +13,9 @@ import {
 import {
   CodeBuildValidator,
   LocalWorkerValidator,
+  createHttpVerifier,
   createMetricVerifier,
+  isPublicAddress,
   scrubbedEnv,
 } from "./index.js";
 
@@ -209,5 +211,87 @@ describe("createMetricVerifier", () => {
       },
     });
     expect((await boom.verify(plan([crit])))[0]?.detail).toContain("denied");
+  });
+});
+
+describe("http verification", () => {
+  const crit = (url: string, expectStatus = 200) => ({
+    id: "h",
+    description: "d",
+    kind: "http" as const,
+    check: { type: "http" as const, url, expectStatus, timeoutMs: 1000 },
+  });
+  const plan = (c: unknown) =>
+    ({ verification: [c] }) as unknown as Parameters<Verifier["verify"]>[0];
+  const rest: Verifier = { verify: async () => [] };
+
+  it("classifies public and non-public addresses", () => {
+    for (const ok of ["93.184.216.34", "8.8.8.8", "2606:4700:4700::1111"])
+      expect(isPublicAddress(ok), ok).toBe(true);
+    for (const bad of [
+      "127.0.0.1",
+      "10.0.0.5",
+      "172.16.0.1",
+      "192.168.1.1",
+      "169.254.169.254",
+      "100.64.0.1",
+      "0.0.0.0",
+      "224.0.0.1",
+      "::1",
+      "fd00::1",
+      "fe80::1",
+      "::ffff:127.0.0.1",
+      "not-an-ip",
+    ])
+      expect(isPublicAddress(bad), bad).toBe(false);
+  });
+
+  it("only calls allowed https hosts and never IP literals, odd ports or credentials", async () => {
+    const calls: string[] = [];
+    const v = createHttpVerifier({
+      allowedHosts: ["api.example.com"],
+      rest,
+      get: async (u) => (calls.push(u.href), { status: 200 }),
+    });
+    const bad = [
+      "http://api.example.com/health",
+      "https://evil.example.net/health",
+      "https://api.example.com:8443/health",
+      "https://user:pw@api.example.com/health",
+      "https://169.254.169.254/latest",
+      "https://[::1]/",
+    ];
+    for (const u of bad) {
+      const [r] = await v.verify(plan(crit(u)));
+      expect(r, u).toMatchObject({ passed: false });
+      expect(r?.detail, u).toContain("not attempted");
+    }
+    expect(calls).toEqual([]);
+    const [ok] = await v.verify(plan(crit("https://API.example.com/health")));
+    expect(ok).toMatchObject({ passed: true });
+    const [wrong] = await createHttpVerifier({
+      allowedHosts: ["api.example.com"],
+      rest,
+      get: async () => ({ status: 503 }),
+    }).verify(plan(crit("https://api.example.com/health")));
+    expect(wrong).toMatchObject({ passed: false });
+  });
+
+  it("fails closed on transport errors and blocks private DNS answers at connect time", async () => {
+    const boom = createHttpVerifier({
+      allowedHosts: ["api.example.com"],
+      rest,
+      get: async () => {
+        throw new Error("ECONNRESET");
+      },
+    });
+    expect((await boom.verify(plan(crit("https://api.example.com/"))))[0]?.detail).toContain(
+      "ECONNRESET",
+    );
+    // "localhost" resolves to loopback; the guarded lookup must refuse before any connection.
+    const real = createHttpVerifier({ allowedHosts: ["localhost"], rest });
+    const [r] = await real.verify(plan(crit("https://localhost/")));
+    expect(r?.passed).toBe(false);
+    expect(r?.detail).toMatch(/non-public|request failed/);
   });
 });

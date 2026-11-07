@@ -52,17 +52,26 @@ export const PlanDraft = z.object({
         id: z.string(),
         description: z.string(),
         kind: z.enum(["test", "metric", "http", "manual"]),
-        /** Machine-checkable form of a `metric` criterion; evaluated read-only against recent telemetry. */
+        /** Machine-checkable form of a `metric` or `http` criterion; evaluated read-only after the change. */
         check: z
-          .object({
-            type: z.literal("metric"),
-            resourceId: z.string().min(1),
-            metric: z.string().min(1),
-            stat: z.enum(["Average", "Sum", "Minimum", "Maximum"]).default("Average"),
-            comparator: z.enum(["lt", "lte", "gt", "gte"]),
-            threshold: z.number().finite(),
-            windowMinutes: z.number().int().min(5).max(360).default(15),
-          })
+          .discriminatedUnion("type", [
+            z.object({
+              type: z.literal("metric"),
+              resourceId: z.string().min(1),
+              metric: z.string().min(1),
+              stat: z.enum(["Average", "Sum", "Minimum", "Maximum"]).default("Average"),
+              comparator: z.enum(["lt", "lte", "gt", "gte"]),
+              threshold: z.number().finite(),
+              windowMinutes: z.number().int().min(5).max(360).default(15),
+            }),
+            z.object({
+              type: z.literal("http"),
+              /** HTTPS GET to a host the connection explicitly allows; never follows redirects. */
+              url: z.url({ protocol: /^https$/ }),
+              expectStatus: z.number().int().min(100).max(599).default(200),
+              timeoutMs: z.number().int().min(500).max(15000).default(5000),
+            }),
+          ])
           .optional(),
       }),
     )

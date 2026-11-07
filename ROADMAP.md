@@ -6,6 +6,6 @@ Next, in priority order:
 
 1. **Live verification** in an isolated test account (explicit opt-in from the account owner): discovery, `ask`, plan → apply → verify on a sample app. Nothing in this repository has been run against real AWS yet.
 2. Hosted deployment: stores and a CDK stack exist (unverified live); still missing are the API Lambda wiring, an identity provider integration for `apps/api`, and retention jobs. See docs/hosted-deployment.md.
-3. SLO-based health checks and automatic verification of HTTP criteria (metric criteria are automated; unreleased).
-4. More resource coverage (metrics for REST API, RDS clusters, X-Ray) and Terraform plan support through an isolated worker.
+3. SLO-based health checks and automatic verification of metric and HTTP criteria (done, unreleased); full SLO objects remain.
+4. More resource coverage (metrics for REST API, RDS clusters, X-Ray); Terraform plan support is documented through an isolated CodeBuild worker (docs/terraform.md).
 5. Plugin sandboxing (out-of-process plugins) and connection providers.

@@ -50,6 +50,8 @@ export const ConnectionProfile = z.object({
   repository: RepositoryLink.optional(),
   /** Optional EventBridge bus that receives change lifecycle events (identifiers and states only). */
   eventBusName: z.string().min(1).optional(),
+  /** Exact hostnames that `http` verification criteria may call (HTTPS only). Empty means none: no outbound checks. */
+  verificationHosts: z.array(z.string().min(1)).default([]),
   lastDiscoveryAt: z.iso.datetime().optional(),
 });
 export type ConnectionProfile = z.infer<typeof ConnectionProfile>;
