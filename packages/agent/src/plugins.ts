@@ -9,10 +9,18 @@ import type { AgentTool } from "./tools.js";
 
 export const PluginConfig = z.object({
   plugins: z
-    .array(z.object({ path: z.string().min(1), sha256: z.string().regex(/^[0-9a-f]{64}$/) }))
+    .array(
+      z.object({
+        path: z.string().min(1),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        /** "process" runs the plugin in a permission-restricted child process (see sandbox.ts). */
+        isolation: z.enum(["in-process", "process"]).default("in-process"),
+      }),
+    )
     .default([]),
 });
 export type PluginConfig = z.infer<typeof PluginConfig>;
+export type PluginConfigInput = z.input<typeof PluginConfig>;
 
 /** What a plugin module receives: the host's zod and defineTool, so schemas are the same instances the registry checks. */
 export interface PluginApi {
@@ -39,11 +47,12 @@ export const sha256File = async (path: string) =>
  * file only, so ship plugins as a single bundled file.
  */
 export async function loadPlugins(
-  config: PluginConfig,
+  configInput: PluginConfigInput,
   registry: ToolRegistry,
 ): Promise<LoadResult> {
+  const config = PluginConfig.parse(configInput);
   const result: LoadResult = { loaded: [], errors: [] };
-  for (const entry of config.plugins) {
+  for (const entry of config.plugins.filter((p) => p.isolation === "in-process")) {
     try {
       if (!isAbsolute(entry.path)) throw new Error("plugin path must be absolute");
       const actual = await sha256File(entry.path);

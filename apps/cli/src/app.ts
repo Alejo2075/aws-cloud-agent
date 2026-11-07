@@ -6,9 +6,11 @@ import {
   PluginConfig,
   askSystem,
   defaultToolRegistry,
+  loadIsolatedPlugins,
   loadPlugins,
   sha256File,
 } from "@cloud-agent/agent";
+import type { IsolatedPlugins } from "@cloud-agent/agent";
 import { ConnectionProfile } from "@cloud-agent/contracts";
 import { discoverSystem } from "@cloud-agent/discovery";
 import { FileAuditLog, FileEvidenceStore, verifyChain } from "@cloud-agent/evidence";
@@ -212,35 +214,43 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       const session = graph && p.costDataAccess !== undefined ? await deps.session(p) : undefined;
       const registry = defaultToolRegistry({ ops: !!session?.observe, repo: !!p.repository });
       const pluginFile = join(deps.home, "plugins.json");
+      let isolated: IsolatedPlugins | undefined;
       try {
         const cfg = PluginConfig.parse(JSON.parse(await deps.readFile(pluginFile)));
         const loaded = await loadPlugins(cfg, registry);
         for (const e of loaded.errors) deps.err(`plugin not loaded (${e.path}): ${e.error}`);
+        isolated = await loadIsolatedPlugins(cfg, registry);
+        for (const e of isolated.errors) deps.err(`plugin not loaded (${e.path}): ${e.error}`);
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT")
           deps.err(`plugins.json ignored: ${(e as Error).message}`);
       }
-      const answer = await askSystem({
-        tools: registry.list(),
-        question,
-        graph,
-        ...(p.repository && { repo: await RepoReader.open(p.repository.path) }),
-        ...(session?.observe && { observability: session.observe }),
-        policy: {
-          sensitiveDataAccess: p.sensitiveDataAccess,
-          costDataAccess: p.costDataAccess,
-          ...(costTag && { costTag }),
-        },
-        evidence: new FileEvidenceStore(evidenceDir(deps.home, p)),
-        model: (await graphs.load(p))
-          ? deps.model(o.model, p.region)
-          : {
-              converse: async () => {
-                throw new Error("unreachable");
+      let answer;
+      try {
+        answer = await askSystem({
+          tools: registry.list(),
+          question,
+          graph,
+          ...(p.repository && { repo: await RepoReader.open(p.repository.path) }),
+          ...(session?.observe && { observability: session.observe }),
+          policy: {
+            sensitiveDataAccess: p.sensitiveDataAccess,
+            costDataAccess: p.costDataAccess,
+            ...(costTag && { costTag }),
+          },
+          evidence: new FileEvidenceStore(evidenceDir(deps.home, p)),
+          model: (await graphs.load(p))
+            ? deps.model(o.model, p.region)
+            : {
+                converse: async () => {
+                  throw new Error("unreachable");
+                },
               },
-            },
-        now: deps.now(),
-      });
+          now: deps.now(),
+        });
+      } finally {
+        isolated?.dispose();
+      }
       await audit.append(
         {
           actor: deps.actor,
@@ -270,22 +280,27 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   plugins.command("list").action(async () => {
     const cfg = await readPlugins();
     if (!cfg.plugins.length) return deps.out("No plugins pinned.");
-    for (const x of cfg.plugins) deps.out(`${x.path}  sha256:${x.sha256}`);
+    for (const x of cfg.plugins) deps.out(`${x.path}  sha256:${x.sha256}  ${x.isolation}`);
   });
   plugins
     .command("add <file>")
     .description(
       "Pin a plugin file by its current sha256 (plugins run in-process with your privileges; review the code first)",
     )
-    .action(async (file) => {
+    .option(
+      "--isolated",
+      "run it in a separate permission-restricted process (no network, writes or child processes; needs Node 25+)",
+    )
+    .action(async (file, o) => {
       const path = resolve(file);
       const sha256 = await sha256File(path);
+      const isolation = o.isolated ? "process" : "in-process";
       const cfg = await readPlugins();
       await mkdir(dirname(pluginFile), { recursive: true });
       await writeFile(
         pluginFile,
         JSON.stringify(
-          { plugins: [...cfg.plugins.filter((x) => x.path !== path), { path, sha256 }] },
+          { plugins: [...cfg.plugins.filter((x) => x.path !== path), { path, sha256, isolation }] },
           null,
           2,
         ),
@@ -297,11 +312,11 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           action: "plugin.pin",
           systemId: "-",
           outcome: "ok",
-          detail: { path, sha256 },
+          detail: { path, sha256, isolation },
         },
         deps.now(),
       );
-      deps.out(`Pinned ${path} (sha256 ${sha256}).`);
+      deps.out(`Pinned ${path} (sha256 ${sha256}, ${isolation}).`);
     });
   plugins.command("remove <file>").action(async (file) => {
     const path = resolve(file);

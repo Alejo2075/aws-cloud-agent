@@ -8,3 +8,4 @@ export * from "./repo-tools.js";
 export * from "./plan.js";
 export * from "./registry.js";
 export * from "./plugins.js";
+export * from "./sandbox.js";
