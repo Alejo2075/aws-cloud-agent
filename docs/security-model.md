@@ -88,3 +88,7 @@ Cloud Agent never runs `terraform plan` or `apply`. `terraform init` downloads p
 ## Not covered yet
 
 The local validation runner is not a sandbox. Network egress controls, KMS-encrypted storage, multi-tenant hosting and a hosted API are out of scope for v0.1.0.
+
+## Outbound verification calls
+
+`http` verification criteria are the only place Cloud Agent makes an outbound request on a plan's behalf. They are off unless the connection lists hosts (`connect --verify-host`). Requests are HTTPS GET only, to an exact allowed hostname on the default port, with no credentials, IP literals or redirects. The resolver answer is checked at connect time and any loopback, private, link-local (including the metadata address), CGNAT, multicast or reserved address is refused, so DNS rebinding cannot reach internal services. The response body is discarded.
