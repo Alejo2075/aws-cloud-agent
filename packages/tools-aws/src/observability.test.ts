@@ -252,3 +252,53 @@ describe("activeAlarms", () => {
     expect(a.at(-1)).toMatchObject({ name: "(listing incomplete)" });
   });
 });
+
+describe("multi-dimension resources (ECS service)", () => {
+  const svc = {
+    id: "svc",
+    arn: "arn:aws:ecs:us-east-1:123456789012:service/prod/web",
+    type: "AWS::ECS::Service",
+    physicalId: "arn:aws:ecs:us-east-1:123456789012:service/prod/web",
+  };
+  it("queries with both ClusterName and ServiceName", async () => {
+    cw.on(GetMetricDataCommand).resolves({
+      MetricDataResults: [{ Id: "m1", Timestamps: [], Values: [] }],
+    });
+    const s = await port.queryMetrics({
+      resource: svc,
+      metric: "CPUUtilization",
+      stat: "Average",
+      range,
+    });
+    expect(s.dimensions).toEqual({ ClusterName: "prod", ServiceName: "web" });
+  });
+  it("refuses old-format ARNs instead of guessing a cluster", async () => {
+    const old = { ...svc, arn: "arn:aws:ecs:us-east-1:123456789012:service/web" };
+    await expect(
+      port.queryMetrics({ resource: old, metric: "CPUUtilization", range }),
+    ).rejects.toThrow("cluster unknown");
+  });
+  it("matches alarms only when every dimension is present", async () => {
+    const { DescribeAlarmsCommand } = await import("@aws-sdk/client-cloudwatch");
+    cw.on(DescribeAlarmsCommand).resolves({
+      MetricAlarms: [
+        {
+          AlarmName: "svc-cpu",
+          Dimensions: [
+            { Name: "ClusterName", Value: "prod" },
+            { Name: "ServiceName", Value: "web" },
+          ],
+        },
+        { AlarmName: "cluster-only", Dimensions: [{ Name: "ClusterName", Value: "prod" }] },
+        {
+          AlarmName: "other-service",
+          Dimensions: [
+            { Name: "ClusterName", Value: "prod" },
+            { Name: "ServiceName", Value: "api" },
+          ],
+        },
+      ],
+    });
+    expect((await port.activeAlarms([svc])).map((a) => a.name)).toEqual(["svc-cpu"]);
+  });
+});

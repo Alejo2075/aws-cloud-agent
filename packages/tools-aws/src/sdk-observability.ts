@@ -58,7 +58,7 @@ export class SdkObservabilityPort implements ObservabilityPort {
     const stat = req.stat ?? "Sum";
     const spec = metricSpecFor(req.resource.type, req.metric, stat);
     const period = choosePeriod(req.range, req.periodSeconds);
-    const dims = { [spec.dimension]: spec.value(req.resource) };
+    const dims = spec.dimensions(req.resource);
     const points: MetricSeries["points"] = [];
     let token: string | undefined;
     await denied("cloudwatch:GetMetricData", async () => {
@@ -268,11 +268,17 @@ export class SdkObservabilityPort implements ObservabilityPort {
   async activeAlarms(resources: ObservedResource[]): Promise<ActiveAlarm[]> {
     // Match on the exact dimension name + value CloudWatch uses for each resource type (from the metric catalog),
     // or on the full ARN. No fuzzy or truncated tokens.
-    const keys = new Map<string, ObservedResource>();
+    const byArn = new Map<string, ObservedResource>();
+    const wanted: Array<{ r: ObservedResource; dims: Record<string, string> }> = [];
     for (const r of resources) {
-      keys.set(`arn=${r.arn}`, r);
+      byArn.set(r.arn, r);
       const spec = METRIC_CATALOG[r.type];
-      if (spec) keys.set(`${spec.dimension}=${spec.value(r)}`, r);
+      if (!spec) continue;
+      try {
+        wanted.push({ r, dims: spec.dimensions(r) });
+      } catch {
+        // Dimensions cannot be derived (e.g. old-format ARN); only an ARN match is possible.
+      }
     }
     const out: ActiveAlarm[] = [];
     let token: string | undefined;
@@ -301,7 +307,14 @@ export class SdkObservabilityPort implements ObservabilityPort {
             ...(a.Dimensions ?? []),
             ...(a.Metrics ?? []).flatMap((m) => m.MetricStat?.Metric?.Dimensions ?? []),
           ];
-          const hit = dims.map((d) => keys.get(`${d.Name}=${d.Value}`)).find(Boolean);
+          const have = new Set(dims.map((d) => `${d.Name}=${d.Value}`));
+          // All of a resource's required dimensions must be present: a cluster-only alarm must not flag a service.
+          const hit =
+            wanted.find((w) => Object.entries(w.dims).every(([k, v]) => have.has(`${k}=${v}`)))
+              ?.r ??
+            dims
+              .map((d) => (d.Name === "arn" ? byArn.get(d.Value ?? "") : undefined))
+              .find(Boolean);
           if (hit)
             out.push({
               name: a.AlarmName ?? "unknown",

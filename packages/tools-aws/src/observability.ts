@@ -106,28 +106,25 @@ export function choosePeriod(range: TimeRange, requested?: number): number {
 
 interface MetricSpec {
   namespace: string;
-  dimension: string;
-  value(r: ObservedResource): string;
+  /** Every dimension CloudWatch requires for this resource's metrics (all of them must match). */
+  dimensions(r: ObservedResource): Record<string, string>;
   metrics: string[];
 }
 const lastSegment = (s: string) => s.split(/[/:]/).pop() ?? s;
 export const METRIC_CATALOG: Record<string, MetricSpec> = {
   "AWS::Lambda::Function": {
     namespace: "AWS/Lambda",
-    dimension: "FunctionName",
-    value: (r) => r.physicalId,
+    dimensions: (r) => ({ FunctionName: r.physicalId }),
     metrics: ["Invocations", "Errors", "Throttles", "Duration", "ConcurrentExecutions"],
   },
   "AWS::ApiGatewayV2::Api": {
     namespace: "AWS/ApiGateway",
-    dimension: "ApiId",
-    value: (r) => r.physicalId,
+    dimensions: (r) => ({ ApiId: r.physicalId }),
     metrics: ["Count", "4xx", "5xx", "Latency", "IntegrationLatency"],
   },
   "AWS::SQS::Queue": {
     namespace: "AWS/SQS",
-    dimension: "QueueName",
-    value: (r) => lastSegment(r.physicalId),
+    dimensions: (r) => ({ QueueName: lastSegment(r.physicalId) }),
     metrics: [
       "ApproximateNumberOfMessagesVisible",
       "ApproximateAgeOfOldestMessage",
@@ -137,8 +134,7 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
   },
   "AWS::DynamoDB::Table": {
     namespace: "AWS/DynamoDB",
-    dimension: "TableName",
-    value: (r) => r.physicalId,
+    dimensions: (r) => ({ TableName: r.physicalId }),
     metrics: [
       "ConsumedReadCapacityUnits",
       "ConsumedWriteCapacityUnits",
@@ -149,14 +145,12 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
   },
   "AWS::SNS::Topic": {
     namespace: "AWS/SNS",
-    dimension: "TopicName",
-    value: (r) => lastSegment(r.arn),
+    dimensions: (r) => ({ TopicName: lastSegment(r.arn) }),
     metrics: ["NumberOfMessagesPublished", "NumberOfNotificationsFailed"],
   },
   "AWS::StepFunctions::StateMachine": {
     namespace: "AWS/States",
-    dimension: "StateMachineArn",
-    value: (r) => r.arn,
+    dimensions: (r) => ({ StateMachineArn: r.arn }),
     metrics: [
       "ExecutionsStarted",
       "ExecutionsSucceeded",
@@ -167,8 +161,7 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
   },
   "AWS::Kinesis::Stream": {
     namespace: "AWS/Kinesis",
-    dimension: "StreamName",
-    value: (r) => r.physicalId,
+    dimensions: (r) => ({ StreamName: r.physicalId }),
     metrics: [
       "IncomingRecords",
       "GetRecords.IteratorAgeMilliseconds",
@@ -178,8 +171,7 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
   },
   "AWS::RDS::DBInstance": {
     namespace: "AWS/RDS",
-    dimension: "DBInstanceIdentifier",
-    value: (r) => r.physicalId,
+    dimensions: (r) => ({ DBInstanceIdentifier: r.physicalId }),
     metrics: [
       "CPUUtilization",
       "DatabaseConnections",
@@ -189,10 +181,20 @@ export const METRIC_CATALOG: Record<string, MetricSpec> = {
       "WriteLatency",
     ],
   },
+  "AWS::ECS::Service": {
+    namespace: "AWS/ECS",
+    dimensions: (r) => {
+      // service/<cluster>/<name>; old-format ARNs have no cluster, so no metric query is possible.
+      const [, cluster, name] = (r.arn.split(":")[5] ?? "").split("/");
+      if (!cluster || !name)
+        throw new BoundsError("old-format ECS service ARN: cluster unknown, cannot query metrics");
+      return { ClusterName: cluster, ServiceName: name };
+    },
+    metrics: ["CPUUtilization", "MemoryUtilization"],
+  },
   "AWS::Events::Rule": {
     namespace: "AWS/Events",
-    dimension: "RuleName",
-    value: (r) => lastSegment(r.arn),
+    dimensions: (r) => ({ RuleName: lastSegment(r.arn) }),
     metrics: ["Invocations", "FailedInvocations"],
   },
 };
