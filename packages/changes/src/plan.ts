@@ -52,6 +52,18 @@ export const PlanDraft = z.object({
         id: z.string(),
         description: z.string(),
         kind: z.enum(["test", "metric", "http", "manual"]),
+        /** Machine-checkable form of a `metric` criterion; evaluated read-only against recent telemetry. */
+        check: z
+          .object({
+            type: z.literal("metric"),
+            resourceId: z.string().min(1),
+            metric: z.string().min(1),
+            stat: z.enum(["Average", "Sum", "Minimum", "Maximum"]).default("Average"),
+            comparator: z.enum(["lt", "lte", "gt", "gte"]),
+            threshold: z.number().finite(),
+            windowMinutes: z.number().int().min(5).max(360).default(15),
+          })
+          .optional(),
       }),
     )
     .min(1),

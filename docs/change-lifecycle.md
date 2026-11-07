@@ -18,4 +18,6 @@ An approval records plan hash, source revision, environment, account, region, ac
 
 Idempotency key = change id + plan hash + account + region + environment; a repeat apply returns the earlier execution. Only transient failures of non-destructive plans are retried (max 2 attempts). The CloudFormation deployer inspects the change set first and refuses removals/replacements the plan did not declare. CloudFormation rollback does not restore data or external side effects; reports say so.
 
+A `metric` criterion can carry a structured `check` (resource, metric, stat, comparator, threshold, window). `changes verify` evaluates it read-only against the last N minutes of telemetry; no datapoints, an unknown resource or a failed query count as not verified. `http` and `test` criteria are still confirmed manually with `--confirm`.
+
 Deployment failure (`FAILED`, `PARTIALLY_APPLIED`) is distinct from verification failure (`ROLLBACK_REQUIRED`: applied but criteria not met).
