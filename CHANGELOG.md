@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [Unreleased]
+
+### Added
+
+- Metric catalog supports several required dimensions per resource; ECS services (`ClusterName` + `ServiceName`) get metrics. Alarm matching now requires every dimension of a resource, so a cluster-only alarm does not flag a service. Old-format ECS ARNs are refused rather than guessed. Mock-tested only.
+
 ## [0.3.2] - 2026-11-07 (prerelease)
 
 ### Added
