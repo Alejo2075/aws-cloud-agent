@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+## [0.4.2] - 2026-11-07 (prerelease)
+
+### Changed
+
+- README intro and Features aligned with the repository description (understand, troubleshoot, manage, evolve); status section condensed. No code changes.
+
 ## [0.4.1] - 2026-11-07 (prerelease)
 
 ### Changed
