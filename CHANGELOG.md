@@ -10,6 +10,8 @@ All notable changes are documented here. Format based on Keep a Changelog; versi
 - `@cloud-agent/stores-aws`: DynamoDB change store and hash-chained audit log (conditional appends), S3 graph and evidence stores. Mock-tested only.
 - `infra/`: `CloudAgentStack` CDK definition (tables, private bucket, read-only role), checked by local synthesis tests. Not deployed or verified live; see docs/hosted-deployment.md.
 
+- Isolated plugins: `plugins add --isolated` runs a plugin in a separate Node process under the permission model (no network, child processes, workers, addons or writes; reads only the pinned file; empty environment). The host verifies the restrictions and fails closed, including on Node versions older than 25. A CI job exercises it on Node 26.
+
 ## [0.3.2] - 2026-11-07 (prerelease)
 
 ### Added

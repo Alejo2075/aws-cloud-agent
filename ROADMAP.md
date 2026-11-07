@@ -8,4 +8,4 @@ Next, in priority order:
 2. Hosted deployment: stores and a CDK stack exist (unverified live); still missing are the API Lambda wiring, an identity provider integration for `apps/api`, and retention jobs. See docs/hosted-deployment.md.
 3. SLO-based health checks and automatic verification of HTTP criteria (metric criteria are automated; unreleased).
 4. More resource coverage (metrics for REST API, RDS clusters, X-Ray) and Terraform plan support through an isolated worker.
-5. Plugin sandboxing (out-of-process plugins) and connection providers.
+5. Connection providers (out-of-process plugins are done: `plugins add --isolated`).

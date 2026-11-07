@@ -77,6 +77,10 @@ Report vulnerabilities as described in [SECURITY.md](../SECURITY.md).
 
 Plugins are code that runs in the Cloud Agent process with your privileges. The registry only limits what the _agent_ can call (read-only tools), not what plugin code can do. Entries must be absolute paths pinned by sha256 in `plugins.json`; a changed file is not loaded. Only pin plugins you have reviewed, shipped as a single bundled file (the hash covers the entry file only).
 
+### Isolated plugins
+
+`cloud-agent plugins add --isolated <file>` pins a plugin to run in a separate Node process under the permission model: no network, no child processes, no workers, no native addons, no file writes, reads limited to the pinned file, and an empty environment. The plugin receives only the validated tool input and returns plain data (capped at 64 KB, 10 s per call); it gets no graph, evidence or credentials. The host checks the child's reported capabilities and refuses to register the tools if any restriction is not in force. It needs Node 25+ (older versions cannot deny network access) and fails closed otherwise. Isolation is process-level, not a VM: it relies on Node's permission model and is not a defense against a Node vulnerability. Isolated plugins export `tools` (name, description, JSON Schema `inputSchema`, `run(input)`) as a single bundled file.
+
 ## HTTP API
 
 Every route authenticates, authorizes per system and environment (deny by default), rate-limits per principal, bounds the body size, audits, and returns opaque 500s. Approval actors always come from the authenticated principal. A caller with no grant on a system gets the same 404 as for a missing system. Plan and apply are intentionally not exposed. Authentication (e.g. JWT verification) is injected by you; this repo ships none.
