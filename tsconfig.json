@@ -17,6 +17,7 @@
     "scripts/**/*.ts",
     "apps/**/*.ts",
     "packages/**/*.ts",
+    "infra/**/*.ts",
     "vitest.config.ts",
     "eslint.config.js"
   ],

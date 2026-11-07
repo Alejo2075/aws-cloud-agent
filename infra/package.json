@@ -1,0 +1,11 @@
+{
+  "name": "@cloud-agent/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CDK definition of Cloud Agent's own storage and read-only access role. Synthesized locally; never deployed by this repository's tooling.",
+  "dependencies": {
+    "aws-cdk-lib": "^2.260.0",
+    "constructs": "^10.4.2"
+  }
+}

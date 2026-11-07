@@ -7,6 +7,8 @@ All notable changes are documented here. Format based on Keep a Changelog; versi
 ### Added
 
 - Metric catalog supports several required dimensions per resource; ECS services (`ClusterName` + `ServiceName`) get metrics. Alarm matching now requires every dimension of a resource, so a cluster-only alarm does not flag a service. Old-format ECS ARNs are refused rather than guessed. Mock-tested only.
+- `@cloud-agent/stores-aws`: DynamoDB change store and hash-chained audit log (conditional appends), S3 graph and evidence stores. Mock-tested only.
+- `infra/`: `CloudAgentStack` CDK definition (tables, private bucket, read-only role), checked by local synthesis tests. Not deployed or verified live; see docs/hosted-deployment.md.
 
 ## [0.3.2] - 2026-11-07 (prerelease)
 

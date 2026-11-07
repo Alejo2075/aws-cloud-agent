@@ -22,7 +22,7 @@ export interface AuditRecord extends AuditInput {
   hash: string;
 }
 
-const GENESIS = "0".repeat(64);
+export const GENESIS = "0".repeat(64);
 
 export function hashRecord(r: Omit<AuditRecord, "hash">): string {
   return createHash("sha256").update(JSON.stringify(r)).digest("hex");
@@ -44,7 +44,7 @@ export function verifyChain(records: AuditRecord[]): { ok: boolean; brokenAt?: n
   return { ok: true };
 }
 
-function seal(input: AuditInput, prevHash: string, now: Date): AuditRecord {
+export function sealAuditRecord(input: AuditInput, prevHash: string, now: Date): AuditRecord {
   const base = {
     ...input,
     detail: input.detail === undefined ? undefined : redact(input.detail),
@@ -59,7 +59,7 @@ function seal(input: AuditInput, prevHash: string, now: Date): AuditRecord {
 export class InMemoryAuditLog implements AuditLog {
   private records: AuditRecord[] = [];
   async append(input: AuditInput, now = new Date()) {
-    const r = seal(input, this.records.at(-1)?.hash ?? GENESIS, now);
+    const r = sealAuditRecord(input, this.records.at(-1)?.hash ?? GENESIS, now);
     this.records.push(r);
     return r;
   }
@@ -86,7 +86,7 @@ export class FileAuditLog implements AuditLog {
   append(input: AuditInput, now = new Date()): Promise<AuditRecord> {
     const run = this.tail.then(async () => {
       const prev = (await this.read()).at(-1)?.hash ?? GENESIS;
-      const r = seal(input, prev, now);
+      const r = sealAuditRecord(input, prev, now);
       await mkdir(dirname(this.file), { recursive: true });
       await appendFile(this.file, `${JSON.stringify(r)}\n`, { mode: 0o600 });
       return r;
