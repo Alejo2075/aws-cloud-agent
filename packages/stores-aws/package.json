@@ -1,0 +1,20 @@
+{
+  "name": "@cloud-agent/stores-aws",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1163.0",
+    "@aws-sdk/client-s3": "^3.1163.0",
+    "@cloud-agent/changes": "workspace:^",
+    "@cloud-agent/contracts": "workspace:^",
+    "@cloud-agent/evidence": "workspace:^",
+    "@cloud-agent/graph": "workspace:^"
+  },
+  "devDependencies": {
+    "aws-sdk-client-mock": "^4.1.0"
+  }
+}

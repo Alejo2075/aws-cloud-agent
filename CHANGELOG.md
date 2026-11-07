@@ -2,6 +2,9 @@
 
 All notable changes are documented here. Format based on Keep a Changelog; versioning follows SemVer (0.x: minor versions may break).
 
+- `@cloud-agent/stores-aws`: DynamoDB change store and hash-chained audit log (conditional appends), S3 graph and evidence stores. Mock-tested only.
+- `infra/`: `CloudAgentStack` CDK definition (tables, private bucket, read-only role), checked by local synthesis tests. Not deployed or verified live; see docs/hosted-deployment.md.
+
 ## [0.3.2] - 2026-11-07 (prerelease)
 
 ### Added
