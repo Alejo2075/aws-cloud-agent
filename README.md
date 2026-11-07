@@ -10,7 +10,7 @@
   <img alt="Amazon Bedrock" src="https://img.shields.io/badge/Amazon-Bedrock-F062B0?labelColor=1a1033&style=flat&logo=amazonaws&logoColor=white">
 </p>
 
-Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, answers questions with cited evidence, and can propose, validate and, only after explicit approval, apply changes. Reads and writes are kept separate in code, roles and CLI.
+Cloud Agent is a serverless AI agent to understand, troubleshoot, manage, and evolve existing AWS applications through natural language. It discovers what is deployed, answers with cited evidence, and applies changes only after explicit approval. Reads and writes are kept separate in code, roles and CLI.
 
 <p align="center">
   <a href="https://aws-agent-hackathon.devpost.com/"><img src="docs/assets/aws-ai-agent-hackathon.png" alt="" height="28" align="absmiddle"></a>
@@ -19,10 +19,9 @@ Cloud Agent is an open-source TypeScript agent for **existing** AWS applications
 
 ## Features
 
-- **Observe**: scoped, read-only discovery into a system graph (Lambda, API Gateway, DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS, RDS). Every relationship says whether it was discovered or inferred.
-- **Ask**: Bedrock Q&A over read-only tools; unverifiable citations are removed.
-- **Operate**: bounded metrics, logs, deployment history, cost and repository inspection (logs and cost need explicit consent).
-- **Change**: plans bound to an immutable hash, approvals tied to the exact plan and target, applied through CloudFormation change sets or a new git branch, then verified and audited.
+- **Understand**: scoped, read-only discovery into a system graph (Lambda, API Gateway, DynamoDB, SQS, SNS, S3, EventBridge, Step Functions, Kinesis, ECS, RDS), and Bedrock Q&A over it. Every relationship says whether it was discovered or inferred, and unverifiable citations are removed.
+- **Troubleshoot**: bounded metrics, logs, deployment history, cost and repository inspection to find what changed and where (logs and cost need explicit consent).
+- **Manage and evolve**: plans bound to an immutable hash, approvals tied to the exact plan and target, applied through CloudFormation change sets or a new git branch, then verified and audited.
 - **Extend**: hash-pinned read-only plugins (optionally isolated), `CloudSystemManifest` import, DynamoDB/S3 stores and a CDK stack.
 
 ## How it works
