@@ -24,20 +24,10 @@
   <a href="ROADMAP.md">Roadmap</a>
 </p>
 
-<br>
-
 <p align="center">
-  <a href="https://aws-agent-hackathon.devpost.com/">
-    <img src="docs/assets/aws-ai-agent-hackathon.png" alt="AWS AI Agent Global Hackathon" width="140">
-  </a>
+  <a href="https://aws-agent-hackathon.devpost.com/"><img src="docs/assets/aws-ai-agent-hackathon.png" alt="" height="28" align="absmiddle"></a>
+  This project is part of the <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>
 </p>
-
-<p align="center">
-  <b>This project is part of the</b><br>
-  <a href="https://aws-agent-hackathon.devpost.com/"><b>AWS AI Agent Global Hackathon</b></a>
-</p>
-
-<br>
 
 Cloud Agent is an open-source TypeScript agent for **existing** AWS applications. It discovers what is deployed, builds a source-attributed system graph, answers questions with cited observations, and can propose, validate and, only after explicit approval, apply changes. It is not a greenfield app generator and not an unrestricted AWS admin tool: reads and writes are separated in code, roles and CLI.
 
