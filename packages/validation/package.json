@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-codebuild": "^3.1163.0",
+    "@aws-sdk/client-codebuild": "^3.1165.0",
     "@cloud-agent/contracts": "workspace:^",
     "zod": "^4.6.7"
   },
