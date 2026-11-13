@@ -20,7 +20,7 @@
     "@aws-sdk/client-ecs": "^3.1163.0",
     "@aws-sdk/client-eventbridge": "^3.1163.0",
     "@aws-sdk/client-kinesis": "^3.1163.0",
-    "@aws-sdk/client-lambda": "^3.1163.0",
+    "@aws-sdk/client-lambda": "^3.1165.0",
     "@aws-sdk/client-rds": "^3.1163.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1163.0",
     "@aws-sdk/client-s3": "^3.1163.0",
